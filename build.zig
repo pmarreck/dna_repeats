@@ -24,6 +24,12 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run repeat-family oracle tests");
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = families_mod })).step);
+    const normalize_mod = b.createModule(.{
+        .root_source_file = b.path("src/normalize.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = normalize_mod })).step);
 
     // Differential test against the fork's real matcher (8-bit, static).
     const pcre2 = b.dependency("pcre2", .{
