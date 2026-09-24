@@ -1,0 +1,10 @@
+.{
+    .name = .dna_repeats,
+    .version = "0.0.0",
+    .fingerprint = 0x9e14916ebad88e33,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .pcre2 = .{ .path = "../.." },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src" },
+}
