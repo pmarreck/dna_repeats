@@ -51,8 +51,42 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    diff_mod.addImport("pcre2_c", pcre2_c.createModule());
+    const pcre2_c_mod = pcre2_c.createModule();
+    diff_mod.addImport("pcre2_c", pcre2_c_mod);
     diff_mod.addImport("pcre2_capture_history", pcre2.module("pcre2_capture_history"));
     diff_mod.linkLibrary(pcre2.artifact("pcre2-8"));
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = diff_mod })).step);
+
+    const finder_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/finder.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    finder_test_mod.addImport("pcre2_c", pcre2_c_mod);
+    finder_test_mod.addImport("pcre2_capture_history", pcre2.module("pcre2_capture_history"));
+    finder_test_mod.linkLibrary(pcre2.artifact("pcre2-8"));
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = finder_test_mod })).step);
+
+    const cli_mod = b.createModule(.{
+        .root_source_file = b.path("src/cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = cli_mod })).step);
+
+    const exe_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    exe_mod.addImport("pcre2_c", pcre2_c_mod);
+    exe_mod.addImport("pcre2_capture_history", pcre2.module("pcre2_capture_history"));
+    exe_mod.linkLibrary(pcre2.artifact("pcre2-8"));
+    const exe = b.addExecutable(.{ .name = "dna-repeats", .root_module = exe_mod });
+    b.installArtifact(exe);
+    const run_exe = b.addRunArtifact(exe);
+    if (b.args) |args| run_exe.addArgs(args);
+    b.step("run", "Run dna-repeats").dependOn(&run_exe.step);
 }

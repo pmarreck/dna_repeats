@@ -312,3 +312,59 @@ test "rules only diverge when a family has overlapping occurrences" {
     try testing.expectEqual(@as(usize, 0), disagreements);
 }
 
+
+/// Upper bound for family length: longest substring occurring twice without overlap.
+/// Any family of length L has two such occurrences, so L <= this; shorter lengths inherit repeats.
+/// complexity: O(n^2) time (one run-length pass per shift), O(1) space.
+pub fn longestNonOverlappingRepeat(subject: []const u8) usize {
+    var best: usize = 0;
+    var shift: usize = 1;
+    while (shift < subject.len) : (shift += 1) {
+        var run: usize = 0;
+        for (subject[0 .. subject.len - shift], subject[shift..]) |a, b| {
+            run = if (a == b) run + 1 else 0;
+            best = @max(best, @min(run, shift));
+        }
+    }
+    return best;
+}
+
+fn bruteLongestNonOverlappingRepeat(subject: []const u8) usize {
+    var best: usize = 0;
+    var len: usize = 1;
+    while (len * 2 <= subject.len) : (len += 1) {
+        var i: usize = 0;
+        search: while (i + len <= subject.len) : (i += 1) {
+            var j = i + len;
+            while (j + len <= subject.len) : (j += 1) {
+                if (std.mem.eql(u8, subject[i..][0..len], subject[j..][0..len])) {
+                    best = len;
+                    break :search;
+                }
+            }
+        }
+    }
+    return best;
+}
+
+test "longest non-overlapping repeat: hand examples" {
+    try testing.expectEqual(@as(usize, 0), longestNonOverlappingRepeat(""));
+    try testing.expectEqual(@as(usize, 0), longestNonOverlappingRepeat("ACGT"));
+    try testing.expectEqual(@as(usize, 1), longestNonOverlappingRepeat("AAA"));
+    try testing.expectEqual(@as(usize, 3), longestNonOverlappingRepeat("AAAAAA"));
+    try testing.expectEqual(@as(usize, 2), longestNonOverlappingRepeat("AAAAA"));
+    try testing.expectEqual(@as(usize, 4), longestNonOverlappingRepeat("ACGTTACGT"));
+}
+
+// Exhaustive over {A,C}^0..12 against a brute-force search.
+test "longest non-overlapping repeat equals brute force" {
+    var subject: [12]u8 = undefined;
+    var n: usize = 0;
+    while (n <= subject.len) : (n += 1) {
+        var code: usize = 0;
+        while (code < (@as(usize, 1) << @intCast(n))) : (code += 1) {
+            for (subject[0..n], 0..) |*b, i| b.* = "AC"[(code >> @intCast(i)) & 1];
+            try testing.expectEqual(bruteLongestNonOverlappingRepeat(subject[0..n]), longestNonOverlappingRepeat(subject[0..n]));
+        }
+    }
+}
