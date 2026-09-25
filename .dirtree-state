@@ -1,0 +1,18 @@
+# Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
+ver=1.2
+annotate=[
+	INTENT.md = Project purpose, constraints and verification
+	PLAN.md = Open work
+	build = Builds the ReleaseFast package through Nix
+	build.zig = Zig build graph: oracle, normalizer, finder, CLI and differential tests against the pinned pcre2 fork
+	build.zig.zon = Package manifest; pins github.com/pmarreck/pcre2 capture-history by commit
+	flake.nix = Nix package and checks; fixed-output Zig dependency fetch
+	src/cli.zig = Pure argument parsing and TSV/JSON rendering
+	src/differential_test.zig = Oracle vs the fork's real matcher
+	src/explore.zig = Reports where family rules disagree on small subjects
+	src/families.zig = Plain quadratic oracle for five repeat-family rules, plus the LNRS bound
+	src/finder.zig = PCRE2 capture-history finder implementing chain_packing
+	src/main.zig = dna-repeats CLI I/O adapter
+	src/normalize.zig = Strict A/C/G/T corpus normalization with byte diagnostics
+	test = Runs all Zig tests and the release build through Nix
+]

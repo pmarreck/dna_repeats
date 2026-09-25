@@ -4,7 +4,10 @@
     .fingerprint = 0x9e14916ebad88e33,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
-        .pcre2 = .{ .path = "../.." },
+        .pcre2 = .{
+            .url = "git+https://github.com/pmarreck/pcre2#bc3401324ebecd8d2bf6e658bf1bd1d44d9fa1ac",
+            .hash = "pcre2-10.49.0-DEV-S7QTbnttpwANahcpvtqf6Qjh_wjFEDXrnXtuCWsO5Prq",
+        },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src" },
 }

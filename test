@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -u
+cd "$(dirname "$0")" || exit 1
+system=$(nix eval --raw --impure --expr builtins.currentSystem) || exit 1
+exec nix build ".#checks.${system}.test" ".#checks.${system}.build" --keep-going --no-link --print-build-logs "$@"
