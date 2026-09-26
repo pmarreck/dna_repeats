@@ -57,8 +57,9 @@
 					'';
 					installPhase = if mode == "test" then "mkdir -p $out; touch $out/passed" else "true";
 				};
+			opponents = system: import ./nix/opponents.nix { pkgs = nixpkgs.legacyPackages.${system}; };
 		in {
-			packages = forSystems (system: { default = package system "build"; });
+			packages = forSystems (system: { default = package system "build"; } // opponents system);
 			checks = forSystems (system: {
 				test = package system "test";
 				# Cross-compile the release build for every supported OS/arch.

@@ -12,6 +12,7 @@ annotate=[
 	build.zig.zon = Package manifest; pins github.com/pmarreck/pcre2 capture-history by commit
 	flake.nix = Nix package and checks; fixed-output Zig dependency fetch
 	intents/beat_existing_tools.md = Accepted direction: beat CRISPR finders, TRF and exact-repeat tools on speed and recall
+	nix/opponents.nix = Nix packages for the opponents: PILER-CR 1.06 and MinCED 0.4.2 from source, TRF from nixpkgs
 	src/cli.zig = Pure CLI pieces: arg parser, --about line, progress-bar renderer, color/progress resolution, TSV/JSON writers
 	src/differential_test.zig = Oracle vs the fork's real matcher
 	src/explore.zig = Reports where family rules disagree on small subjects
