@@ -18,6 +18,7 @@ Completed items retire to docs/PLAN_LOG.md. Split out of the pcre2 fork on 2026-
 - [ ] Label families by maximality and Pareto (length vs count) dominance.
 - [x] ./bm: linear-scaling gate (N..8N, 11600-92800 bases, ratio 1.93-2.00) and two-sided 25% per-machine ndjson gate on user time; both gates mutation-checked. (done 2026-09-26 00:20 EDT)
 - [ ] ./bm: add the longestNonOverlappingRepeat bound (default --max-len path) to the scaling gate.
-- [ ] Cross-platform build matrix (Linux/macOS/Windows, aarch64/x86_64) as a Nix check.
+- [x] Cross-platform matrix as the Nix cross check in ./test: x86_64/aarch64 linux-musl (static), aarch64-macos, x86_64/aarch64 windows-gnu, JIT on. Static x86_64 and aarch64 (qemu) output identical to native. (done 2026-09-26 01:00 EDT)
+- [ ] Run the Windows (wine) and macOS binaries, not just build them; wire Mechatron Prime CI (mechatron-ci skill) once Peter wants CI here.
 - [x] Repin the fork to 5f6c6088 (capture-history event limit, PCRE2_ERROR_CAPTURE_HISTORY_LIMIT); 58 tests green. (done 2026-09-25 23:35 EDT)
 - [ ] Repin the fork when capture-history changes; the deps hash in flake.nix must be regenerated with it.

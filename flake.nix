@@ -5,7 +5,9 @@
 		let
 			systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
 			forSystems = nixpkgs.lib.genAttrs systems;
-			package = system: checked:
+			# mode: "build" (ReleaseFast package), "test" (zig build test) or "cross" (every release target).
+			crossTargets = [ "x86_64-linux-musl" "aarch64-linux-musl" "aarch64-macos" "x86_64-windows-gnu" "aarch64-windows-gnu" ];
+			package = system: mode:
 				let
 					pkgs = nixpkgs.legacyPackages.${system};
 					# Fixed-output fetch of the whole Zig dependency tree (the pcre2 fork, pinned by commit).
@@ -32,13 +34,13 @@
 						'';
 					};
 				in pkgs.stdenv.mkDerivation {
-					pname = "dna-repeats";
+					pname = "dna-repeats${if mode == "build" then "" else "-" + mode}";
 					version = "0.1.0";
 					src = self;
 					strictDeps = true;
 					nativeBuildInputs = [ pkgs.zig ];
 					dontConfigure = true;
-					dontFixup = checked;
+					dontFixup = mode != "build";
 					buildPhase = ''
 						runHook preBuild
 						export HOME=$TMPDIR
@@ -46,15 +48,21 @@
 						mkdir -p "$ZIG_GLOBAL_CACHE_DIR"
 						cp -r ${zigDeps}/p "$ZIG_GLOBAL_CACHE_DIR/"
 						chmod -R u+w "$ZIG_GLOBAL_CACHE_DIR"
-						zig build ${if checked then "test --summary all" else "-Doptimize=ReleaseFast --prefix $out"}
+						${{
+							test = "zig build test --summary all";
+							build = "zig build -Doptimize=ReleaseFast --prefix $out";
+							cross = nixpkgs.lib.concatMapStringsSep "\n" (t: "zig build -Doptimize=ReleaseFast -Dtarget=${t} --prefix $out/${t}") crossTargets;
+						}.${mode}}
 						runHook postBuild
 					'';
-					installPhase = if checked then "mkdir -p $out; touch $out/passed" else "true";
+					installPhase = if mode == "test" then "mkdir -p $out; touch $out/passed" else "true";
 				};
 		in {
-			packages = forSystems (system: { default = package system false; });
+			packages = forSystems (system: { default = package system "build"; });
 			checks = forSystems (system: {
-				test = package system true;
+				test = package system "test";
+				# Cross-compile the release build for every supported OS/arch.
+				cross = package system "cross";
 				build = self.packages.${system}.default;
 				# CLI surface suite against the ReleaseFast package.
 				cli = nixpkgs.legacyPackages.${system}.runCommand "dna-repeats-cli-tests" {
