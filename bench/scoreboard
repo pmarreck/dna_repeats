@@ -2,7 +2,7 @@
 # CRISPR scoreboard (intents/beat_existing_tools.md): every tool on every pinned genome,
 # wall time and peak memory from GNU time, recall/precision from bench/score.awk against
 # CRISPRCasdb, appended to bench/scoreboard-<machine-id>.ndjson.
-# usage: bench/scoreboard [--set dev|heldout] [TOOL...]   (default: dev set, every tool below)
+# usage: bench/scoreboard [--set dev|heldout|heldout2] [TOOL...]   (default: dev set, every tool below)
 #   dev: the genomes filters are tuned on; heldout: the fixed held-out set used for claims.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -14,6 +14,7 @@ if [ "${1:-}" = "--set" ]; then set=${2:?--set needs dev or heldout}; shift 2; f
 case $set in
 	dev) genomes=$(build genomes) && truth=$(build crisprTruth) || exit 1 ;;
 	heldout) genomes=$(build heldoutGenomes) && truth=$(build heldoutTruth) || exit 1 ;;
+	heldout2) genomes=$(build heldout2Genomes) && truth=$(build heldout2Truth) || exit 1 ;;
 	*) echo "unknown set: $set" >&2; exit 2 ;;
 esac
 minced=$(build minced)/bin/minced || exit 1

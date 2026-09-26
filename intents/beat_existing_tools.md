@@ -65,6 +65,10 @@ of its accession string, first 30. The set is pinned in nix/benchdata.nix like t
 development genomes. Changing a filter after seeing held-out results means picking
 a fresh held-out set by the same rule (next 30), and saying so in the report.
 
+Held-out #1 was used on 2026-09-26 to diagnose the welded-arrays bug, so it is now
+development data. Held-out #2 (positions 31-60; 30 genomes, 70 evidence-level-4 arrays)
+was pinned in nix/benchdata.nix before any result on it was seen.
+
 ## Open questions
 
 - How an array counts as found. Provisional (agent proposal, 2026-09-26, in

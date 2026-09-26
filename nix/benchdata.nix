@@ -47,6 +47,41 @@ let
 		"CP075895.1" = "sha256-/4bJyGF//NZFja4FTl8Ev/5rRz6AOnkcq973Hzfo2gQ=";
 		"CP017762.1" = "sha256-yULqPvZQhGhyx4uCXHn4V7GwUN5cFYG5g9TcVGQvFoA=";
 	};
+	# Held-out set #2: the next 30 by the same rule (positions 31-60), pinned before any
+	# result on it was seen, after held-out #1 was used to diagnose a bug.
+	heldout2Hashes = {
+		"CM002029.1" = "sha256-GVYCc6t1JKwzzkSAOREyMc+chz61lKYyzdJ8Xcn7HAk=";
+		"CP051845.1" = "sha256-SZtHxV/Rzjbbyl4O+04hYbItsRRFEzUvm30Zh50L8Lc=";
+		"CP050440.1" = "sha256-wBQkEPx6eTCaDS3pcvLdSfgGKWffzeTD4eorBi7dwbg=";
+		"CP064674.1" = "sha256-YuxAW/eEFSGYbnanLunyqy0dH55amTBY07DNG5KVpPA=";
+		"CP043473.1" = "sha256-u21g8FmZNJuF7lXPfrZFJPK6pNbnzprz/xfXk78BY34=";
+		"CP018787.1" = "sha256-cbrlHe4yK2pwl3+Bbp5NDKKzG8qMEqRJpDAuaQh4rKo=";
+		"CP021137.1" = "sha256-eEdSMl8sgGjEE56qiw3tfjZJW9OLjI/KJZ8C1MH3Tuc=";
+		"CP085589.1" = "sha256-JtfAuSpPxfqZksaL6fEeT006w9wyKlMrl6W/bafMd/I=";
+		"CP057055.1" = "sha256-5iqrgB2jsduQ6D5JZhbTnrlHraBisTQ1qJU+MrFsda8=";
+		"CP091659.1" = "sha256-bVOKHURZCnegPFY75Ibgv68PTLR0XFEAsc3UvqFW/6U=";
+		"CP016826.1" = "sha256-3dBDQUtKLyGe8GjEHeURcGKhT0wCfR6L3WvThVQtgjg=";
+		"CP016625.1" = "sha256-Q22inbRnFi/Qqe78setYg44XbG1DAJZyP/prs1f65/w=";
+		"CP091822.1" = "sha256-AL+l3BmMKN4WFLl95UebKI8GphvyjdJwT1tcRAIrf7c=";
+		"CP061239.1" = "sha256-aA1De3NyAIcnEJFsL5JNz2hZxJ/XRDCPWWU6FJYdWw8=";
+		"CP082582.1" = "sha256-mJazt86RvWt+6mzHZLPeZUzjSrFEkzFb3huW8EaPfxE=";
+		"CP029553.1" = "sha256-TlETs2fPWBT9SvOenvqdndF6WgE17xTsTDsmWl3lmRM=";
+		"CP009577.1" = "sha256-FKmII3KI/2cq0qxVDXq4wMPsP09BUryB/a9Jj7OZCc0=";
+		"CP022127.1" = "sha256-TWQ1g81SoGrJz3SxZ6rmiJZiY0U3B5D1M2sVyC8sNyk=";
+		"CP004014.1" = "sha256-RFyG+XwpR/NXLHD29N0NUs6s+fQt3MnoKCQSl/dDq0g=";
+		"CP009196.1" = "sha256-eEGRP0xp6EQb7jyLrUXySOmD0rrsROD7P5VaRQHEjdY=";
+		"CP057879.1" = "sha256-3D8bLqGFNjFFAG4miW3LR63ePjeC5OD6KXgWyy2m8zY=";
+		"CP020620.1" = "sha256-j2LdezBisVPBpA9Fv0teDB4SycNE8n63EntPe3rbNh0=";
+		"CP028398.1" = "sha256-LsDAOp/yaEPqF6iKnsdsJWLt1fWbIddFEw2JqRdFtPU=";
+		"CP074328.1" = "sha256-J5nP82wF6e5OThg2WtvN1YndC+vJQ+KQfXEjoCvTVhY=";
+		"CP040900.1" = "sha256-kxluo2B6VI+svYkovQYuUlial+zZJwcHzPZ2gQi2S10=";
+		"CP026202.1" = "sha256-CaE6EasHDfmOg5G3joe9VMTTqrAkQh/4DzJo4V4VJEg=";
+		"CP062204.1" = "sha256-M9B4TM3yAWdq4Mmf0O1i0D5HhIpTx/gHCDcr4gIGImI=";
+		"CP058072.1" = "sha256-p6RHKoFyO4EfKReCb7fIUThL6pyv8proUoCtASI6i6s=";
+		"CP072021.1" = "sha256-5inYaVzsF3uSyebfETviAP8EUy4yVr7WWbcKsdz41LM=";
+		"CP001363.1" = "sha256-tCy4WAAXaA33EBrUa52H3xlDoi6Pyb/wcETVm5w+grc=";
+
+	};
 	fetchGenome = acc: hash: pkgs.fetchurl {
 		name = "${acc}.fa";
 		url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=${acc}&rettype=fasta&retmode=text";
@@ -84,4 +119,6 @@ in {
 	crisprTruth = mkTruth "crisprcasdb-truth.tsv" devHashes;
 	heldoutGenomes = genomeFarm "scoreboard-heldout-genomes" heldoutHashes;
 	heldoutTruth = mkTruth "crisprcasdb-heldout-truth.tsv" heldoutHashes;
+	heldout2Genomes = genomeFarm "scoreboard-heldout2-genomes" heldout2Hashes;
+	heldout2Truth = mkTruth "crisprcasdb-heldout2-truth.tsv" heldout2Hashes;
 }
