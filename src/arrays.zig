@@ -61,52 +61,56 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
             first = last + 1;
         }
     }
-    std.mem.sort(Run, runs.items, {}, Run.lessByStart);
 
-    // B: group overlapping runs (nested lengths of one array); extend each group's
-    // longest run outward through degraded copies.
+    // B: greedy peel, best seed first (most copies, then longest): a run overlapping an
+    // accepted array is one of its nested lengths or a chance fragment and is skipped;
+    // otherwise it is extended outward through degraded copies and accepted. Unlike
+    // grouping by overlap, neighboring arrays welded by chance runs each keep their seed.
+    std.mem.sort(Run, runs.items, {}, Run.moreCopiesFirst);
     var cands: std.ArrayList(Cand) = .empty;
     defer {
         for (cands.items) |c| gpa.free(c.copies);
         cands.deinit(gpa);
     }
-    var i: usize = 0;
-    while (i < runs.items.len) {
-        var end = runs.items[i].end;
-        var best = runs.items[i];
-        var j = i + 1;
-        while (j < runs.items.len and runs.items[j].start < end) : (j += 1) {
-            const r = runs.items[j];
-            end = @max(end, r.end);
-            // Most copies first (a chance 2-copy flank extension must not beat the true unit), then longest.
-            if (r.copies.len > best.copies.len or (r.copies.len == best.copies.len and r.len > best.len)) best = r;
-        }
-        const copies = try extend(gpa, subject, best, params);
-        try cands.append(gpa, .{ .start = copies[0], .end = copies[copies.len - 1] + best.len, .len = best.len, .copies = copies });
-        i = j;
+    var covered: Coverage = .{};
+    defer covered.deinit(gpa);
+    for (runs.items) |r| {
+        if (covered.overlaps(r.start, r.end)) continue;
+        const copies = try extend(gpa, subject, r, params);
+        errdefer gpa.free(copies);
+        const cand: Cand = .{ .start = copies[0], .end = copies[copies.len - 1] + r.len, .len = r.len, .seed = r.copies[0], .copies = copies };
+        try covered.add(gpa, cand.start, cand.end);
+        try cands.append(gpa, cand);
     }
     std.mem.sort(Cand, cands.items, {}, Cand.lessByStart);
 
-    // C: merge candidates that now overlap (fragments bridged by extension); judge
-    // each merged array by its longest unit.
+    // C: merge candidates that overlap after extension (fragments bridged through a
+    // degraded copy) into their union; judge each merged array by its best candidate.
     var out: std.ArrayList(Array) = .empty;
     errdefer out.deinit(gpa);
-    i = 0;
+    var i: usize = 0;
     while (i < cands.items.len) {
         var end = cands.items[i].end;
         var best = cands.items[i];
+        var copies = cands.items[i].copies.len;
+        var last_copy_end = cands.items[i].end;
         var j = i + 1;
         while (j < cands.items.len and cands.items[j].start < end) : (j += 1) {
             const c = cands.items[j];
             end = @max(end, c.end);
+            // Count only this candidate's copies past those already counted.
+            for (c.copies) |p| if (p >= last_copy_end) {
+                copies += 1;
+                last_copy_end = p + c.len;
+            };
             if (c.copies.len > best.copies.len or (c.copies.len == best.copies.len and c.len > best.len)) best = c;
         }
-        if (best.copies.len >= params.min_copies and
+        if (copies >= params.min_copies and
             similarSpacerFraction(subject, best.copies, best.len, params.max_spacer_identity) <= params.max_similar_spacer_fraction and
-            selfSimilarity(subject[best.copies[0]..][0..best.len]) <= params.max_unit_self_similarity and
+            selfSimilarity(subject[best.seed..][0..best.len]) <= params.max_unit_self_similarity and
             !(best.len >= params.max_unit and extendable(subject, best.copies, best.len)))
         {
-            try out.append(gpa, .{ .start = best.start, .end = best.end, .copies = best.copies.len, .unit_len = best.len, .unit_pos = best.copies[0] });
+            try out.append(gpa, .{ .start = cands.items[i].start, .end = end, .copies = copies, .unit_len = best.len, .unit_pos = best.seed });
         }
         i = j;
     }
@@ -120,20 +124,61 @@ const Run = struct {
     len: usize,
     copies: []const usize,
 
-    fn lessByStart(_: void, a: Run, b: Run) bool {
+    fn moreCopiesFirst(_: void, a: Run, b: Run) bool {
+        if (a.copies.len != b.copies.len) return a.copies.len > b.copies.len;
+        if (a.len != b.len) return a.len > b.len;
         return a.start < b.start;
     }
 };
 
-/// An extended array candidate owning its copy positions.
+/// An extended array candidate owning its copy positions; `seed` is an exact copy of the unit.
 const Cand = struct {
     start: usize,
     end: usize,
     len: usize,
+    seed: usize,
     copies: []usize,
 
     fn lessByStart(_: void, a: Cand, b: Cand) bool {
         return a.start < b.start;
+    }
+};
+
+/// Disjoint, sorted intervals of accepted arrays; overlap queries by binary search.
+const Coverage = struct {
+    spans: std.ArrayList([2]usize) = .empty,
+
+    /// Index of the first span ending after `start`.
+    fn firstEndingAfter(self: Coverage, start: usize) usize {
+        var lo: usize = 0;
+        var hi = self.spans.items.len;
+        while (lo < hi) {
+            const mid = (lo + hi) / 2;
+            if (self.spans.items[mid][1] <= start) lo = mid + 1 else hi = mid;
+        }
+        return lo;
+    }
+
+    fn overlaps(self: Coverage, start: usize, end: usize) bool {
+        const k = self.firstEndingAfter(start);
+        return k < self.spans.items.len and self.spans.items[k][0] < end;
+    }
+
+    /// Insert [start, end), merging any spans it overlaps.
+    fn add(self: *Coverage, gpa: Allocator, start: usize, end: usize) Allocator.Error!void {
+        const k = self.firstEndingAfter(start);
+        var m = k;
+        var lo = start;
+        var hi = end;
+        while (m < self.spans.items.len and self.spans.items[m][0] < end) : (m += 1) {
+            lo = @min(lo, self.spans.items[m][0]);
+            hi = @max(hi, self.spans.items[m][1]);
+        }
+        try self.spans.replaceRange(gpa, k, m - k, &.{.{ lo, hi }});
+    }
+
+    fn deinit(self: *Coverage, gpa: Allocator) void {
+        self.spans.deinit(gpa);
     }
 };
 
@@ -439,4 +484,59 @@ test "an internally periodic (low-complexity) unit is not an array" {
     const arrays = try callOn(&buf, .{});
     defer testing.allocator.free(arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
+}
+
+test "neighboring arrays stay separate when a chance 2-copy run spans the gap between them" {
+    var buf: [900]u8 = undefined;
+    fillRandom(&buf, 81);
+    const period = dr.len + 30;
+    const a_start: usize = 40;
+    const b_start = a_start + 4 * period + dr.len + 75; // 75 bases after A's last copy: past max_spacer
+    for (0..5) |k| {
+        @memcpy(buf[a_start + k * period ..][0..dr.len], dr);
+        @memcpy(buf[b_start + k * period ..][0..dr.len], dr);
+    }
+    // A chance 27-mer (the repeat's last 10 bases plus 17 shared bases) starting inside
+    // A's last copy and inside B's first copy: 2 copies 71 bases apart, so it overlaps both arrays.
+    var tail: [17]u8 = undefined;
+    fillRandom(&tail, 82);
+    const a_last = a_start + 4 * period;
+    @memcpy(buf[a_last + dr.len ..][0..tail.len], &tail);
+    @memcpy(buf[b_start + dr.len ..][0..tail.len], &tail);
+    const arrays = try callOn(&buf, .{});
+    defer testing.allocator.free(arrays);
+    try testing.expectEqual(@as(usize, 2), arrays.len);
+    try testing.expectEqual(a_start, arrays[0].start);
+    try testing.expectEqual(@as(usize, 5), arrays[0].copies);
+    try testing.expectEqual(b_start, arrays[1].start);
+    try testing.expectEqual(@as(usize, 5), arrays[1].copies);
+}
+
+test "the reported unit is an exact copy, not a degraded one found by extension" {
+    var buf: [400]u8 = undefined;
+    const bad = degraded(3);
+    const subject = plantWith(&buf, 91, &.{ 50, 104, 160, 215 }, 50, &bad);
+    const arrays = try callOn(subject, .{});
+    defer testing.allocator.free(arrays);
+    try testing.expectEqual(@as(usize, 1), arrays.len);
+    try testing.expectEqual(@as(usize, 50), arrays[0].start);
+    try testing.expectEqual(@as(usize, 4), arrays[0].copies);
+    try testing.expectEqualStrings(dr, subject[arrays[0].unit_pos..][0..dr.len]);
+}
+
+test "coverage: half-open overlap at every boundary, and merging spans" {
+    var c: Coverage = .{};
+    defer c.deinit(testing.allocator);
+    try c.add(testing.allocator, 10, 20);
+    try c.add(testing.allocator, 40, 50);
+    // Classify every query [s, s+5) for s in 0..60 against spans [10,20) and [40,50).
+    for (0..60) |s| {
+        const want = (s + 5 > 10 and s < 20) or (s + 5 > 40 and s < 50);
+        try testing.expectEqual(want, c.overlaps(s, s + 5));
+    }
+    try c.add(testing.allocator, 18, 42); // bridges both spans into one
+    try testing.expectEqual(@as(usize, 1), c.spans.items.len);
+    try testing.expectEqual([2]usize{ 10, 50 }, c.spans.items[0]);
+    try c.add(testing.allocator, 50, 55); // touching, not overlapping: stays separate
+    try testing.expectEqual(@as(usize, 2), c.spans.items.len);
 }

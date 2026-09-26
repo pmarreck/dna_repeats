@@ -7,6 +7,13 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 
 ## Now
 
+- [ ] CRITICAL (review): -o truncates before input is read; `-o X` with input X destroys it, and failed runs leave empty outputs. Write to a temp file and rename on success; refuse output == input.
+- [ ] CRITICAL (review): candidate scan walks the whole capture-history chain per start (O(m^2) in tandem/poly-A runs); use an existence-only pattern `(?=([ACGT]{L}).{0,G}?\1)` without capture history.
+- [ ] CRITICAL (review): default --max-len is O(n^2), computed twice, N runs inflate it past PCRE2 limits; decide default (Peter) and compute once.
+- [x] Greedy peel of seed runs (coverage index, O(log n) overlap) keeps welded neighbor arrays apart; union region and deduplicated copies on merge; unit reported from the exact seed. Dev 24/25 88.9%; held-out #1 (now contaminated) 68/71 85.0%. (done 2026-09-26 17:55 EDT)
+- [ ] Review: overflow at max_gap + (max_len - lo); validate --max-gap/--max-len <= 65535; worker errors lose their type.
+- [ ] Review: scoreboard hides tool failures, score.awk drops predictions on truth-less sequences, log lacks tool versions/input checksums/dirty flag.
+- [ ] Review: help text stale (FASTA, IUPAC, -j default, columns); explore ships in the package; differential_test.zig tests an old pattern; bench/gen-corpus is quadratic; full report in CODE_REVIEW.md.
 - [x] Step 1a: MinCED 0.4.2 and PILER-CR 1.06 build from source in nix/opponents.nix (TRF from nixpkgs); smoke-tested on Aquifex aeolicus. (done 2026-09-26 13:08 EDT)
 - [x] Step 1b: nix/benchdata.nix pins 8 genomes and derives CRISPRCasdb truth (46 arrays, 25 at evidence level 4; starts are 1-based). (done 2026-09-26 13:20 EDT)
 - [x] FASTA input: per-record search, record column/field, IUPAC -> N never matched (oracle agrees, exhaustive {A,C,N} differential). E. coli 4.6 Mb in 0.11 s wall. (done 2026-09-26 13:25 EDT)
@@ -17,6 +24,9 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Step 5: bounded-mismatch copies with an independent oracle; then rerun the scoreboard. Treat N and partial IUPAC codes (R, Y, ...) as free mismatches there; exact mode keeps N never-matching (Peter asked, 2026-09-26).
 - [x] Held-out set #1 (30 genomes, 71 EL4 arrays, rule fixed first): MinCED 67/71 98.5% 15.42 s 307 MB; PILER-CR 64/71 94.6% 22.09 s 19.7 MB; dna-repeats (filters frozen at ccae987) 66/71 86.8% 2.75 s 46 MB. All three on the Pareto frontier; any filter change now must be judged on held-out set #2 (next 30 by the same rule). (done 2026-09-26 15:10 EDT)
 - [ ] After the PCRE2 path matures: measure a pure-Zig finder's performance ceiling against the fork and report to Peter (Peter, 2026-09-26: fork first).
+- [ ] Exploratory, measure + TDD (Peter, 2026-09-26): pure-Zig candidate scan (rolling 2-bit k-mers, recent-position table, O(n)), differential-tested against the regex scan on all small inputs and the genomes; report the measured speedup.
+- [ ] Exploratory, measure + TDD: 2-bit base packing (32 bases per u64) for unit equality and popcount Hamming in seed extension.
+- [ ] Exploratory, measure + TDD: SIMD (@Vector) window search for unit copies in extension and scan; compare against scalar and PCRE2 JIT.
 - [ ] Final report (Peter, 2026-09-26): Pareto chart of every tool across speed, precision, recall and divergent-copy tolerance, reproducible from bench/scoreboard, with findings and anything new; publish as an artifact.
 - [ ] Best-in-class biotech CLI: standard outputs (GFF3, BED, FASTA of spacers), --crispr preset, clear docs/README, packaging (Nix, static binaries; consider Bioconda).
 - [x] Split the finder, oracle and CLI out of the pcre2 fork into this repository with history; pin the fork by commit bc340132 and build through Nix. (done 2026-09-24 21:50 EDT)
