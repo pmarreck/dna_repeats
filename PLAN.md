@@ -6,6 +6,7 @@ Decision (Peter, 2026-09-26): the CLI may import the Zig core directly here; no 
 
 ## Now
 
+- [ ] Beat existing repeat finders (Peter, 2026-09-26): pending decisions on metric (speed vs accuracy), scope (mismatches/reverse complement are INTENT non-goals) and first opponent; then a public-genome scoreboard.
 - [x] Split the finder, oracle and CLI out of the pcre2 fork into this repository with history; pin the fork by commit bc340132 and build through Nix. (done 2026-09-24 21:50 EDT)
 - [x] CLI conventions: --about, -o/--output with -/@stdout/@stderr, --no-color/--no-ansi/NO_COLOR, --ascii/--simple, TTY progress (--progress/--no-progress), debug banner, tests/cli suite as the Nix cli check in ./test. (done 2026-09-25 23:55 EDT)
 - [ ] Show Peter the rendered progress bar (Unicode and --ascii) and encode the approved look as exact assertions.
