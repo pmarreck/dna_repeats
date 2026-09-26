@@ -20,6 +20,10 @@ the counterexamples that ruled them out are recorded in the pcre2 fork's
   pins it by commit in `build.zig.zon`; no DNA-specific code belongs in PCRE2.
 - Input normalization is strict: ASCII whitespace and `-` are removed, letters
   uppercased, and any other byte is an error, never silently dropped.
+- FASTA input (first non-whitespace byte `>`) is searched per record; there,
+  IUPAC ambiguity codes become N, which keeps its position but never matches
+  (2026-09-26, following Peter's N question; wildcard matching belongs to the
+  mismatch mode).
 - The local corpus `$HOME/Documents/dna_sample.txt` is read-only and must not
   be published or committed. Derived copies stay private.
 - Speed improvements are hypotheses until measured.

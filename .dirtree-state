@@ -12,6 +12,7 @@ annotate=[
 	build.zig.zon = Package manifest; pins github.com/pmarreck/pcre2 capture-history by commit
 	flake.nix = Nix package and checks; fixed-output Zig dependency fetch
 	intents/beat_existing_tools.md = Accepted direction: beat CRISPR finders, TRF and exact-repeat tools on speed and recall
+	nix/benchdata.nix = Pinned scoreboard inputs: 8 CRISPR genomes (NCBI efetch) and CRISPRCasdb ground truth derived from its SQL dump
 	nix/opponents.nix = Nix packages for the opponents: PILER-CR 1.06 and MinCED 0.4.2 from source, TRF from nixpkgs
 	src/cli.zig = Pure CLI pieces: arg parser, --about line, progress-bar renderer, color/progress resolution, TSV/JSON writers
 	src/differential_test.zig = Oracle vs the fork's real matcher
@@ -19,7 +20,7 @@ annotate=[
 	src/families.zig = Plain quadratic oracle for five repeat-family rules, plus the LNRS bound
 	src/finder.zig = PCRE2 capture-history finder: JIT chain pattern, chain_packing Packer, widened-gap candidateStarts (+chunked parallel), per-length worker pool
 	src/main.zig = dna-repeats I/O adapter: stdio/file I/O, TTY detection, progress, debug banner; calls finder per length
-	src/normalize.zig = Strict A/C/G/T corpus normalization with byte diagnostics
+	src/normalize.zig = Strict plain-input normalizer plus FASTA parser (records, IUPAC ambiguity -> N)
 	test = Runs all Zig tests and the release build through Nix
 	tests/cli/run = Bash CLI surface suite (options, stdio aliases, -o, progress/color); run by the Nix cli check
 ]

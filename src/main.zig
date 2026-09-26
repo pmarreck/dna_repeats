@@ -117,44 +117,69 @@ pub fn main(init: std.process.Init) !u8 {
     const clean_buf = try gpa.alloc(u8, raw.len);
     defer gpa.free(clean_buf);
     var diag: norm.Diagnostic = .{};
-    const subject = norm.normalize(raw, clean_buf, &diag) catch {
-        try stderr.print("dna-repeats: invalid byte 0x{x:0>2} at input offset {d}\n", .{ diag.byte, diag.offset });
-        return 1;
+    // FASTA when the first non-whitespace byte is '>'; otherwise one plain, strict sequence.
+    const trimmed = std.mem.trimStart(u8, raw, " \t\r\n");
+    const is_fasta = trimmed.len > 0 and trimmed[0] == '>';
+    var single: [1]norm.Record = undefined;
+    const records: []const norm.Record = if (is_fasta) norm.parseFasta(gpa, raw, clean_buf, &diag) catch |e| switch (e) {
+        error.OutOfMemory => return e,
+        error.MissingHeader => {
+            try stderr.print("dna-repeats: sequence before the first FASTA header at input offset {d}\n", .{diag.offset});
+            return 1;
+        },
+        error.InvalidBase => {
+            try stderr.print("dna-repeats: invalid byte 0x{x:0>2} at input offset {d}\n", .{ diag.byte, diag.offset });
+            return 1;
+        },
+    } else blk: {
+        single[0] = .{ .name = "", .seq = norm.normalize(raw, clean_buf, &diag) catch {
+            try stderr.print("dna-repeats: invalid byte 0x{x:0>2} at input offset {d}\n", .{ diag.byte, diag.offset });
+            return 1;
+        } };
+        break :blk &single;
     };
+    defer if (is_fasta) gpa.free(records);
 
-    // Default bound: no family can be longer than the longest non-overlapping repeat.
-    const max_len = cfg.max_len orelse fam.longestNonOverlappingRepeat(subject);
     var num: [64]u8 = undefined;
-    try paint(stderr, color, "1", try std.fmt.bufPrint(&num, "{d}", .{subject.len}));
-    try stderr.print(" bases; lengths {d}..{d}; max gap {d}\n", .{ cfg.min_len, max_len, cfg.max_gap });
+    var bases: usize = 0;
+    for (records) |r| bases += r.seq.len;
+    try paint(stderr, color, "1", try std.fmt.bufPrint(&num, "{d}", .{bases}));
+    if (is_fasta) try stderr.print(" bases in {d} records", .{records.len}) else try stderr.writeAll(" bases");
+    // Default bound: no family can be longer than the longest non-overlapping repeat.
+    if (cfg.max_len) |m| try stderr.print("; lengths {d}..{d}", .{ cfg.min_len, m }) else if (is_fasta) try stderr.print("; lengths {d}..auto", .{cfg.min_len}) else try stderr.print("; lengths {d}..{d}", .{ cfg.min_len, fam.longestNonOverlappingRepeat(records[0].seq) });
+    try stderr.print("; max gap {d}\n", .{cfg.max_gap});
     try stderr.flush();
 
     if (cfg.json) try out.writeAll("[");
     var first = true;
     var total: usize = 0;
-    const lengths = if (max_len >= cfg.min_len and max_len > 0) max_len - @max(cfg.min_len, 1) + 1 else 0;
     const started = std.Io.Clock.awake.now(io);
-    // One wide-gap scan finds every offset that can start a chain at any length;
-    // each length then probes only those offsets, lengths spread over worker threads.
-    // -j is honored as given; the automatic count stays single-threaded for small inputs.
-    const threads = cfg.threads orelse if (subject.len < finder.parallel_min_offsets) 1 else (std.Thread.getCpuCount() catch 1);
-    const starts = try finder.candidateStartsParallel(gpa, subject, cfg.min_len, max_len, cfg.max_gap, .{ .threads = threads });
-    defer gpa.free(starts);
     var painter: ProgressPainter = .{ .w = stderr, .io = io, .started = started, .width = columns -| 1, .ascii = cfg.ascii };
-    if (progress) painter.paint(0, lengths);
-    var results = try finder.familiesByLength(gpa, subject, starts, cfg.min_len, max_len, cfg.max_gap, threads, if (progress) painter.hook() else null);
-    defer results.deinit(gpa);
-    var len = max_len;
-    while (len >= cfg.min_len and len > 0) : (len -= 1) {
-        const fams = results.forLength(len);
-        total += fams.len;
-        if (cfg.json) {
-            for (fams) |one| {
-                try out.writeAll(if (first) "\n" else ",\n");
-                first = false;
-                try cli.writeJsonFamily(out, subject, one);
-            }
-        } else try cli.writeTsv(out, subject, fams);
+    for (records) |rec| {
+        const subject = rec.seq;
+        const max_len = cfg.max_len orelse fam.longestNonOverlappingRepeat(subject);
+        const lengths = if (max_len >= cfg.min_len and max_len > 0) max_len - @max(cfg.min_len, 1) + 1 else 0;
+        // One wide-gap scan finds every offset that can start a chain at any length;
+        // each length then probes only those offsets, lengths spread over worker threads.
+        // -j is honored as given; the automatic count stays single-threaded for small inputs.
+        const threads = cfg.threads orelse if (subject.len < finder.parallel_min_offsets) 1 else (std.Thread.getCpuCount() catch 1);
+        const starts = try finder.candidateStartsParallel(gpa, subject, cfg.min_len, max_len, cfg.max_gap, .{ .threads = threads });
+        defer gpa.free(starts);
+        if (progress) painter.paint(0, lengths);
+        var results = try finder.familiesByLength(gpa, subject, starts, cfg.min_len, max_len, cfg.max_gap, threads, if (progress) painter.hook() else null);
+        defer results.deinit(gpa);
+        var len = max_len;
+        while (len >= cfg.min_len and len > 0) : (len -= 1) {
+            const fams = results.forLength(len);
+            total += fams.len;
+            if (cfg.json) {
+                for (fams) |one| {
+                    try out.writeAll(if (first) "\n" else ",\n");
+                    first = false;
+                    if (is_fasta) try cli.writeJsonFamilyRecord(out, rec.name, subject, one) else try cli.writeJsonFamily(out, subject, one);
+                }
+            } else if (is_fasta) try cli.writeTsvRecord(out, rec.name, subject, fams) else try cli.writeTsv(out, subject, fams);
+        }
     }
     if (cfg.json) try out.writeAll("\n]\n");
     try out.flush();

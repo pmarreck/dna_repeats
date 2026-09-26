@@ -195,16 +195,39 @@ pub fn resolveColumns(columns_env: ?[]const u8, tty_columns: ?usize) usize {
 
 /// One family per line: length, count, unit, positions.
 pub fn writeTsv(w: *std.Io.Writer, subject: []const u8, fams: []const fam.Family) !void {
+    for (fams) |f| try writeTsvFields(w, subject, f);
+}
+
+/// FASTA input: as writeTsv with the record name as a leading column.
+pub fn writeTsvRecord(w: *std.Io.Writer, record: []const u8, subject: []const u8, fams: []const fam.Family) !void {
     for (fams) |f| {
-        try w.print("{d}\t{d}\t{s}\t", .{ f.len, f.positions.len, subject[f.positions[0]..][0..f.len] });
-        for (f.positions, 0..) |p, i| try w.print("{s}{d}", .{ if (i == 0) "" else ",", p });
-        try w.writeAll("\n");
+        try w.print("{s}\t", .{record});
+        try writeTsvFields(w, subject, f);
     }
+}
+
+fn writeTsvFields(w: *std.Io.Writer, subject: []const u8, f: fam.Family) !void {
+    try w.print("{d}\t{d}\t{s}\t", .{ f.len, f.positions.len, subject[f.positions[0]..][0..f.len] });
+    for (f.positions, 0..) |p, i| try w.print("{s}{d}", .{ if (i == 0) "" else ",", p });
+    try w.writeAll("\n");
 }
 
 /// Emit one family as a JSON object (no trailing separator).
 pub fn writeJsonFamily(w: *std.Io.Writer, subject: []const u8, f: fam.Family) !void {
-    try w.print("{{\"length\":{d},\"count\":{d},\"unit\":\"{s}\",\"positions\":[", .{ f.len, f.positions.len, subject[f.positions[0]..][0..f.len] });
+    try w.writeAll("{");
+    try writeJsonFields(w, subject, f);
+}
+
+/// FASTA input: as writeJsonFamily with a leading, JSON-escaped "record" field.
+pub fn writeJsonFamilyRecord(w: *std.Io.Writer, record: []const u8, subject: []const u8, f: fam.Family) !void {
+    try w.writeAll("{\"record\":");
+    try std.json.Stringify.encodeJsonString(record, .{}, w);
+    try w.writeAll(",");
+    try writeJsonFields(w, subject, f);
+}
+
+fn writeJsonFields(w: *std.Io.Writer, subject: []const u8, f: fam.Family) !void {
+    try w.print("\"length\":{d},\"count\":{d},\"unit\":\"{s}\",\"positions\":[", .{ f.len, f.positions.len, subject[f.positions[0]..][0..f.len] });
     for (f.positions, 0..) |p, i| try w.print("{s}{d}", .{ if (i == 0) "" else ",", p });
     try w.writeAll("]}");
 }
@@ -345,6 +368,18 @@ test "terminal width: COLUMNS, then the terminal, then 80" {
     try testing.expectEqual(@as(usize, 100), resolveColumns("0", 100));
     try testing.expectEqual(@as(usize, 80), resolveColumns(null, null));
     try testing.expectEqual(@as(usize, 80), resolveColumns(null, 0));
+}
+
+test "FASTA records add a leading record column and a record field" {
+    var positions = [_]usize{ 0, 2, 4 };
+    const fams = [_]fam.Family{.{ .len = 2, .positions = &positions }};
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try writeTsvRecord(&w, "chr1", "ACACAC", &fams);
+    try testing.expectEqualStrings("chr1\t2\t3\tAC\t0,2,4\n", w.buffered());
+    w = .fixed(&buf);
+    try writeJsonFamilyRecord(&w, "chr \"1\"", "ACACAC", fams[0]);
+    try testing.expectEqualStrings("{\"record\":\"chr \\\"1\\\"\",\"length\":2,\"count\":3,\"unit\":\"AC\",\"positions\":[0,2,4]}", w.buffered());
 }
 
 test "TSV and JSON rendering" {

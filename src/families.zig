@@ -40,6 +40,8 @@ pub fn families(gpa: Allocator, subject: []const u8, len: usize, max_gap: usize,
 
     var p: usize = 0;
     while (p + len <= subject.len) : (p += 1) {
+        // Units are bases only: an N (or any other byte) never repeats, as in the finder's [ACGT] unit.
+        if (!isBases(subject[p..][0..len])) continue;
         if (seenEarlier(subject, len, p)) continue;
         const occ = try occurrences(gpa, subject, len, p);
         defer gpa.free(occ);
@@ -90,6 +92,14 @@ pub fn families(gpa: Allocator, subject: []const u8, len: usize, max_gap: usize,
     }
     std.mem.sort(Family, out.items, {}, lessByFirst);
     return out.toOwnedSlice(gpa);
+}
+
+fn isBases(unit: []const u8) bool {
+    for (unit) |b| switch (b) {
+        'A', 'C', 'G', 'T' => {},
+        else => return false,
+    };
+    return true;
 }
 
 fn lessByFirst(_: void, a: Family, b: Family) bool {
@@ -367,4 +377,16 @@ test "longest non-overlapping repeat equals brute force" {
             try testing.expectEqual(bruteLongestNonOverlappingRepeat(subject[0..n]), longestNonOverlappingRepeat(subject[0..n]));
         }
     }
+}
+
+test "units containing a non-base byte (N) never form families" {
+    const none = try families(testing.allocator, "ANAANA", 2, 1, .chain_packing);
+    defer freeFamilies(testing.allocator, none);
+    try testing.expectEqual(@as(usize, 0), none.len);
+    // A and C recur across the Ns; N itself does not count.
+    const some = try families(testing.allocator, "ANCANC", 1, 2, .chain_packing);
+    defer freeFamilies(testing.allocator, some);
+    try testing.expectEqual(@as(usize, 2), some.len);
+    try testing.expectEqualSlices(usize, &.{ 0, 3 }, some[0].positions);
+    try testing.expectEqualSlices(usize, &.{ 2, 5 }, some[1].positions);
 }

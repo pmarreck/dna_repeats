@@ -17,6 +17,9 @@ against a published annotation, with precision reported alongside.
 - First opponent: CRISPR array finders (MinCED, PILER-CR, CRT), the closest match
   to the gap-bounded model. Later: Tandem Repeats Finder, then exact-repeat
   tools (Vmatch, MUMmer repeat-match) on speed.
+- Ground truth for CRISPR arrays: CRISPRCasdb (highest evidence level). It was built
+  with CRISPRCasFinder, so the scoreboard also reports pairwise tool agreement to
+  expose that bias.
 
 ## Constraints
 
@@ -30,7 +33,5 @@ against a published annotation, with precision reported alongside.
 
 ## Open questions
 
-- Which annotation is ground truth for CRISPR arrays (CRISPRCasdb or another
-  curated set), and how an array counts as found (repeat consensus match,
-  position overlap threshold).
+- How an array counts as found (repeat consensus match, position overlap threshold).
 - How many mismatches per copy the approximate mode allows by default.

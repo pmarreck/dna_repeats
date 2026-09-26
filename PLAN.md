@@ -7,11 +7,12 @@ Decision (Peter, 2026-09-26): the CLI may import the Zig core directly here; no 
 ## Now
 
 - [x] Step 1a: MinCED 0.4.2 and PILER-CR 1.06 build from source in nix/opponents.nix (TRF from nixpkgs); smoke-tested on Aquifex aeolicus. (done 2026-09-26 13:08 EDT)
-- [ ] Step 1b: ground truth from the CRISPRCasdb dump (ccpp_db.zip, 2022-04-14, fetched by hash) and 8 public genomes by GenBank accession.
+- [x] Step 1b: nix/benchdata.nix pins 8 genomes and derives CRISPRCasdb truth (46 arrays, 25 at evidence level 4; starts are 1-based). (done 2026-09-26 13:20 EDT)
+- [x] FASTA input: per-record search, record column/field, IUPAC -> N never matched (oracle agrees, exhaustive {A,C,N} differential). E. coli 4.6 Mb in 0.11 s wall. (done 2026-09-26 13:25 EDT)
 - [ ] Step 2: scoreboard script (bench/scoreboard): each tool on each genome, time, memory and arrays found; recall/precision against the annotation; ndjson log.
 - [ ] Step 3: exact-only dna-repeats baseline on the scoreboard (repeat 23-47 bp, spacer <= 72).
 - [ ] Step 4: reverse-complement strand.
-- [ ] Step 5: bounded-mismatch copies with an independent oracle; then rerun the scoreboard.
+- [ ] Step 5: bounded-mismatch copies with an independent oracle; then rerun the scoreboard. Treat N and partial IUPAC codes (R, Y, ...) as free mismatches there; exact mode keeps N never-matching (Peter asked, 2026-09-26).
 - [ ] After the PCRE2 path matures: measure a pure-Zig finder's performance ceiling against the fork and report to Peter (Peter, 2026-09-26: fork first).
 - [x] Split the finder, oracle and CLI out of the pcre2 fork into this repository with history; pin the fork by commit bc340132 and build through Nix. (done 2026-09-24 21:50 EDT)
 - [x] CLI conventions: --about, -o/--output with -/@stdout/@stderr, --no-color/--no-ansi/NO_COLOR, --ascii/--simple, TTY progress (--progress/--no-progress), debug banner, tests/cli suite as the Nix cli check in ./test. (done 2026-09-25 23:55 EDT)

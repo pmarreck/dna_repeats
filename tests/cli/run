@@ -142,5 +142,21 @@ t=progress-off-when-results-on-stderr
 capture "$bin" "${run[@]}" --progress -o @stderr "$work/sample.txt"
 expect_rc $t 0 && expect_lacks $t "$err" "0/7" && pass $t
 
+printf '>rec1 first record\nACGTACGT\n>rec2\nttnnttnntt\n' >"$work/two.fa"
+
+t=fasta-records
+capture "$bin" --min-len 2 --max-len 4 --max-gap 2 "$work/two.fa"
+expect_rc $t 0 && expect_has $t "$out" $'rec1\t4\t2\tACGT\t0,4' && expect_has $t "$out" $'rec2\t2\t3\tTT\t0,4,8' &&
+	expect_lacks $t "$out" "NN" && expect_has $t "$err" "18 bases in 2 records; lengths 2..4" && pass $t
+
+t=fasta-json-record-field
+capture "$bin" --min-len 4 --max-len 4 --max-gap 2 --json "$work/two.fa"
+expect_rc $t 0 && expect_eq $t "$(printf '%s' "$out" | jq -c '.[0]')" '{"record":"rec1","length":4,"count":2,"unit":"ACGT","positions":[0,4]}' && pass $t
+
+t=fasta-sequence-before-header
+printf 'ACGT\n>x\nACGT\n' >"$work/bad.fa"
+capture "$bin" "$work/bad.fa"
+expect_rc $t 1 && expect_eq $t "$err" "dna-repeats: invalid byte 0x3e at input offset 5" && pass $t
+
 printf '%d passed, %d failed\n' "$passes" "$fails"
 exit "$fails"

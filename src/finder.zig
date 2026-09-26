@@ -387,7 +387,7 @@ fn expectPrunedMatchesOracle(subject: []const u8, min_len: usize, max_len: usize
 }
 
 test "pruned finder equals the chain_packing oracle on every small subject" {
-    inline for (.{ .{ "AC", 9 }, .{ "ACGT", 6 } }) |spec| {
+    inline for (.{ .{ "AC", 9 }, .{ "ACGT", 6 }, .{ "ACN", 7 } }) |spec| {
         const alphabet = spec[0];
         var subject: [spec[1]]u8 = undefined;
         var n: usize = 1;
@@ -521,9 +521,9 @@ test "hand examples match the oracle" {
     try expectMatchesOracle("ACGTTACGTTTACGTCCCCCCCCCCCCACGT", 4, 10);
 }
 
-// Differential: exhaustive over {A,C}^1..9, L 1..4, D 0..2, plus {A,C,G,T}^1..6.
+// Differential: exhaustive over {A,C}^1..9, L 1..4, D 0..2, plus {A,C,G,T}^1..6 and {A,C,N}^1..7 (N never in a unit).
 test "finder equals the chain_packing oracle on every small subject" {
-    inline for (.{ .{ "AC", 9 }, .{ "ACGT", 6 } }) |spec| {
+    inline for (.{ .{ "AC", 9 }, .{ "ACGT", 6 }, .{ "ACN", 7 } }) |spec| {
         const alphabet = spec[0];
         var subject: [spec[1]]u8 = undefined;
         var n: usize = 1;

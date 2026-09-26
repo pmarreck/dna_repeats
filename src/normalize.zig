@@ -29,6 +29,55 @@ pub fn normalize(raw: []const u8, out: []u8, diag: *Diagnostic) Error![]u8 {
     return out[0..n];
 }
 
+pub const Record = struct {
+    /// First word of the header line, borrowed from the raw input.
+    name: []const u8,
+    /// Normalized bases (A/C/G/T, ambiguity codes as N), borrowed from `out`.
+    seq: []u8,
+};
+
+/// Parse FASTA: each '>' line starts a record named by its first word; sequence
+/// lines follow `normalize`'s rules, except that IUPAC ambiguity codes
+/// (N R Y K M S W B D H V, either case) become N, which the finder never matches.
+/// Sequence bytes before the first header are an error. `out` must hold raw.len bytes.
+pub fn parseFasta(gpa: std.mem.Allocator, raw: []const u8, out: []u8, diag: *Diagnostic) (Error || error{ MissingHeader, OutOfMemory })![]Record {
+    var records: std.ArrayList(Record) = .empty;
+    errdefer records.deinit(gpa);
+    var n: usize = 0;
+    var seq_start: usize = 0;
+    var pos: usize = 0;
+    while (pos < raw.len) {
+        const end = std.mem.indexOfScalarPos(u8, raw, pos, '\n') orelse raw.len;
+        const line = raw[pos..end];
+        if (line.len > 0 and line[0] == '>') {
+            if (records.items.len > 0) records.items[records.items.len - 1].seq = out[seq_start..n];
+            var words = std.mem.tokenizeAny(u8, line[1..], " \t\r");
+            try records.append(gpa, .{ .name = words.next() orelse "", .seq = out[n..n] });
+            seq_start = n;
+        } else for (line, pos..) |byte, i| {
+            const clean: u8 = switch (byte) {
+                ' ', '\t', '\r', 0x0b, 0x0c, '-' => continue,
+                'A', 'C', 'G', 'T' => byte,
+                'a', 'c', 'g', 't' => byte - ('a' - 'A'),
+                'N', 'R', 'Y', 'K', 'M', 'S', 'W', 'B', 'D', 'H', 'V', 'n', 'r', 'y', 'k', 'm', 's', 'w', 'b', 'd', 'h', 'v' => 'N',
+                else => {
+                    diag.* = .{ .offset = i, .byte = byte };
+                    return error.InvalidBase;
+                },
+            };
+            if (records.items.len == 0) {
+                diag.* = .{ .offset = i, .byte = byte };
+                return error.MissingHeader;
+            }
+            out[n] = clean;
+            n += 1;
+        }
+        pos = end + 1;
+    }
+    if (records.items.len > 0) records.items[records.items.len - 1].seq = out[seq_start..n];
+    return records.toOwnedSlice(gpa);
+}
+
 const testing = std.testing;
 
 fn expectClean(raw: []const u8, want: []const u8) !void {
@@ -75,4 +124,59 @@ test "every byte value is classified" {
     try testing.expectEqual(@as(usize, 8), kept); // ACGTacgt
     try testing.expectEqual(@as(usize, 7), skipped); // space \t \n \v \f \r -
     try testing.expectEqual(@as(usize, 256 - 15), rejected);
+}
+
+fn expectFasta(raw: []const u8, want: []const [2][]const u8) !void {
+    var buf: [128]u8 = undefined;
+    var diag: Diagnostic = .{};
+    const recs = try parseFasta(testing.allocator, raw, &buf, &diag);
+    defer testing.allocator.free(recs);
+    try testing.expectEqual(want.len, recs.len);
+    for (recs, want) |r, w| {
+        try testing.expectEqualStrings(w[0], r.name);
+        try testing.expectEqualStrings(w[1], r.seq);
+    }
+}
+
+test "FASTA: records split at headers, name is the first word" {
+    try expectFasta(">chr1 E. coli\nacgt\nAC-GT\r\n>plasmid\nGGTT\n", &.{ .{ "chr1", "ACGTACGT" }, .{ "plasmid", "GGTT" } });
+    try expectFasta(">only", &.{.{ "only", "" }});
+    try expectFasta("\n\n>x\tdesc\nA", &.{.{ "x", "A" }});
+}
+
+test "FASTA: IUPAC ambiguity codes become N" {
+    try expectFasta(">x\nANRYKMSWBDHVnrykmswbdhv\n", &.{.{ "x", "ANNNNNNNNNNNNNNNNNNNNNN" }});
+}
+
+test "FASTA: errors keep the raw offset" {
+    var buf: [64]u8 = undefined;
+    var diag: Diagnostic = .{};
+    try testing.expectError(error.InvalidBase, parseFasta(testing.allocator, ">x\nACGU\n", &buf, &diag));
+    try testing.expectEqual(@as(usize, 6), diag.offset);
+    try testing.expectEqual(@as(u8, 'U'), diag.byte);
+    try testing.expectError(error.MissingHeader, parseFasta(testing.allocator, "ACGT\n>x\nA", &buf, &diag));
+    try testing.expectEqual(@as(usize, 0), diag.offset);
+}
+
+// Classifier over the full byte range on a sequence line.
+test "FASTA: every sequence byte value is classified" {
+    var base: usize = 0;
+    var ambiguous: usize = 0;
+    var skipped: usize = 0;
+    var rejected: usize = 0;
+    for (0..256) |b| {
+        if (b == '\n' or b == '>') continue; // line structure, not sequence content
+        var buf: [8]u8 = undefined;
+        var diag: Diagnostic = .{};
+        const raw = [_]u8{ '>', 'x', '\n', @intCast(b) };
+        if (parseFasta(testing.allocator, &raw, &buf, &diag)) |recs| {
+            defer testing.allocator.free(recs);
+            const s = recs[0].seq;
+            if (s.len == 0) skipped += 1 else if (s[0] == 'N') ambiguous += 1 else base += 1;
+        } else |_| rejected += 1;
+    }
+    try testing.expectEqual(@as(usize, 8), base); // ACGTacgt
+    try testing.expectEqual(@as(usize, 22), ambiguous); // NRYKMSWBDHV, both cases
+    try testing.expectEqual(@as(usize, 6), skipped); // space \t \v \f \r -
+    try testing.expectEqual(@as(usize, 254 - 36), rejected);
 }
