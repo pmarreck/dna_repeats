@@ -16,6 +16,8 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Review: overflow at max_gap + (max_len - lo); validate --max-gap/--max-len <= 65535; worker errors lose their type.
 - [ ] Review: scoreboard hides tool failures, score.awk drops predictions on truth-less sequences, log lacks tool versions/input checksums/dirty flag.
 - [ ] Review: help text stale (FASTA, IUPAC, -j default, columns); explore ships in the package; differential_test.zig tests an old pattern; bench/gen-corpus is quadratic; full report in CODE_REVIEW.md.
+- [ ] Review (tests): array merge (phase C) untested, 4 mutations survived: add overlapping-candidate tests for copy counts and coordinates; budget boundary test at budget+1 mismatches; left-flank extendable case; threshold equality boundaries; spacer-identity filter pinned alone.
+- [ ] Review (tests): finder exhaustive tests ~2 min (munmap churn from the testing allocator): per-subject arena, run families.zig tests once as a module, drop Finder.families-only tests covered by the pruned differential; byte classifier tests should check each byte's class, not bucket totals; CLI stderr assertions and missing cases (-j, JSON across records, empty/N-only records, min-len > max-len).
 - [x] Step 1a: MinCED 0.4.2 and PILER-CR 1.06 build from source in nix/opponents.nix (TRF from nixpkgs); smoke-tested on Aquifex aeolicus. (done 2026-09-26 13:08 EDT)
 - [x] Step 1b: nix/benchdata.nix pins 8 genomes and derives CRISPRCasdb truth (46 arrays, 25 at evidence level 4; starts are 1-based). (done 2026-09-26 13:20 EDT)
 - [x] FASTA input: per-record search, record column/field, IUPAC -> N never matched (oracle agrees, exhaustive {A,C,N} differential). E. coli 4.6 Mb in 0.11 s wall. (done 2026-09-26 13:25 EDT)

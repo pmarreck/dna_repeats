@@ -1,6 +1,7 @@
 # Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
 ver=1.2
 annotate=[
+	CODE_REVIEW.md = Deep code review 2026-09-26: status table plus five reviewers' findings (memory, complexity, correctness, tests, structure)
 	INTENT.md = Project purpose, constraints and verification
 	PLAN.md = Open work
 	ZIG_RECENT_API_CHANGES.md = Symlink to Peter's Zig 0.14-0.16 API cheatsheet (Obsidian vault)
