@@ -12,6 +12,7 @@ pub const usage =
     \\  --max-len N          longest repeat length (default: longest non-overlapping repeat)
     \\  --max-gap D          most bases between consecutive occurrences (default 400)
     \\  --json               JSON array instead of tab-separated lines
+    \\  -j, --threads N      worker threads (default: one per CPU)
     \\  -o, --output PATH    write results to PATH ('-' or @stdout: stdout; @stderr: stderr)
     \\  --progress           always show progress on stderr
     \\  --no-progress        never show progress (default: only when stderr is a terminal)
@@ -47,6 +48,8 @@ pub const Config = struct {
     color: Tristate = .auto,
     progress: Tristate = .auto,
     ascii: bool = false,
+    /// Worker threads for the per-length stage; null means one per CPU.
+    threads: ?usize = null,
 };
 
 pub const ParseError = error{ MissingValue, BadNumber, UnknownOption, MissingInput, ExtraInput };
@@ -91,6 +94,12 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
         } else if (eql(a, "--ascii") or eql(a, "--simple")) {
             cfg.ascii = true;
             cfg.color = .off;
+        } else if (eql(a, "-j") or eql(a, "--threads")) {
+            i += 1;
+            if (i >= args.len) return error.MissingValue;
+            const n = std.fmt.parseInt(usize, args[i], 10) catch return error.BadNumber;
+            if (n == 0) return error.BadNumber;
+            cfg.threads = n;
         } else if (eql(a, "-o") or eql(a, "--output")) {
             i += 1;
             if (i >= args.len) return error.MissingValue;
@@ -222,6 +231,14 @@ test "--about and output destinations" {
     const cfg = try parseArgs(&.{ "x", "-o", "a.tsv", "--output", "out dir/b.tsv" });
     try testing.expectEqualStrings("out dir/b.tsv", cfg.output.file);
     try testing.expectError(error.MissingValue, parseArgs(&.{ "x", "-o" }));
+}
+
+test "--threads: default auto, positive counts, later wins" {
+    try testing.expectEqual(@as(?usize, null), (try parseArgs(&.{"x"})).threads);
+    try testing.expectEqual(@as(?usize, 4), (try parseArgs(&.{ "x", "--threads", "4" })).threads);
+    try testing.expectEqual(@as(?usize, 1), (try parseArgs(&.{ "x", "-j", "8", "-j", "1" })).threads);
+    try testing.expectError(error.BadNumber, parseArgs(&.{ "x", "--threads", "0" }));
+    try testing.expectError(error.MissingValue, parseArgs(&.{ "x", "-j" }));
 }
 
 test "display switches: later wins" {

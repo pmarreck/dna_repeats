@@ -12,7 +12,8 @@ Completed items retire to docs/PLAN_LOG.md. Split out of the pcre2 fork on 2026-
 - [x] PCRE2 JIT for the finder (compile-time anchoring): 483 -> 96 ms, 5.0x, synthetic 2900-base corpus, lengths 8..25, gap 300, ReleaseFast, hyperfine. (done 2026-09-26 00:02 EDT)
 - [x] Unanchored scan per length: 91.3 -> 86.4 ms (1.06x). (done 2026-09-26 00:04 EDT)
 - [x] Candidate-start pruning: one min-length scan with gap D+(max-min) bounds every length's chain starts; lengths probe only those (anchored JIT). 88.1 -> 10.4 ms (8.4x), output identical on sample and synthetic; ~46x vs the interpreter. (done 2026-09-26 00:12 EDT)
-- [ ] Make the finder as efficient as possible (Peter, 2026-09-25): next profile the 10 ms (process start, candidate scan, per-length compile+JIT), then ./bm with an ndjson log.
+- [x] Parallel: chunked candidate scan (exact truncated windows, exhaustive boundary test) and a per-length worker pool; -j/--threads, auto stays 1 thread under 16K bases. 92800 bases: 269.5 -> 48.0 ms wall (5.6x), user +5%; 2900 unchanged at 10.6 ms. (done 2026-09-26 00:48 EDT)
+- [ ] Efficiency, remaining: at 2900 bases 1.2 of 10.6 ms is process start and ~5.5 ms the single O(n*D) candidate scan; a cheaper gap formulation inside the regex is the next lever. Show Peter before going further.
 - [x] Peter's "array of multiple matches" is capture history, which the finder already uses via Api.events; nothing further to adopt. (done 2026-09-25 23:50 EDT)
 - [ ] Label families by maximality and Pareto (length vs count) dominance.
 - [x] ./bm: linear-scaling gate (N..8N, 11600-92800 bases, ratio 1.93-2.00) and two-sided 25% per-machine ndjson gate on user time; both gates mutation-checked. (done 2026-09-26 00:20 EDT)

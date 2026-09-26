@@ -126,7 +126,7 @@ expect_lacks $t "$err" "$esc" && expect_lacks $t "$err" $'\r' && pass $t
 
 t=forced-progress-ascii
 capture "$bin" "${run[@]}" --progress --ascii "$work/sample.txt"
-expect_rc $t 0 && expect_has $t "$err" "] 0/7 0% " && expect_has $t "$err" "] 6/7 85% " &&
+expect_rc $t 0 && expect_has $t "$err" "] 0/7 0% " && expect_has $t "$err" "] 7/7 100% " &&
 	expect_lacks $t "$err" "$esc" && expect_eq $t "$out" "$tsv" &&
 	LC_ALL=C grep -q '[^[:print:][:space:]]' "$work/stderr" && fail $t "non-ASCII byte in --ascii stderr" || pass $t
 

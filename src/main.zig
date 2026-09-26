@@ -15,6 +15,32 @@ fn paint(w: *std.Io.Writer, color: bool, sgr: []const u8, text: []const u8) !voi
     if (color) try w.print("\x1b[{s}m{s}\x1b[0m", .{ sgr, text }) else try w.writeAll(text);
 }
 
+/// Adapts the finder's progress hook (called on this thread only) to the pure renderer.
+/// A write error only loses a progress frame, so it is ignored.
+const ProgressPainter = struct {
+    w: *std.Io.Writer,
+    io: std.Io,
+    started: std.Io.Timestamp,
+    width: usize,
+    ascii: bool,
+
+    fn paint(self: *ProgressPainter, done: usize, total: usize) void {
+        const elapsed = self.started.durationTo(std.Io.Clock.awake.now(self.io)).toMilliseconds();
+        self.w.writeAll("\r") catch return;
+        cli.renderProgress(self.w, .{ .done = done, .total = total, .elapsed_ms = @intCast(elapsed), .width = self.width, .ascii = self.ascii }) catch return;
+        self.w.flush() catch return;
+    }
+
+    fn step(ctx: *anyopaque, done: usize, total: usize) void {
+        const self: *ProgressPainter = @ptrCast(@alignCast(ctx));
+        self.paint(done, total);
+    }
+
+    fn hook(self: *ProgressPainter) finder.StepFn {
+        return .{ .ctx = self, .step = step };
+    }
+};
+
 pub fn main(init: std.process.Init) !u8 {
     const gpa = init.gpa;
     const io = init.io;
@@ -96,27 +122,18 @@ pub fn main(init: std.process.Init) !u8 {
     const lengths = if (max_len >= cfg.min_len and max_len > 0) max_len - @max(cfg.min_len, 1) + 1 else 0;
     const started = std.Io.Clock.awake.now(io);
     // One wide-gap scan finds every offset that can start a chain at any length;
-    // each length then probes only those offsets.
-    const starts = try finder.candidateStarts(gpa, subject, cfg.min_len, max_len, cfg.max_gap);
+    // each length then probes only those offsets, lengths spread over worker threads.
+    // -j is honored as given; the automatic count stays single-threaded for small inputs.
+    const threads = cfg.threads orelse if (subject.len < finder.parallel_min_offsets) 1 else (std.Thread.getCpuCount() catch 1);
+    const starts = try finder.candidateStartsParallel(gpa, subject, cfg.min_len, max_len, cfg.max_gap, .{ .threads = threads });
     defer gpa.free(starts);
+    var painter: ProgressPainter = .{ .w = stderr, .io = io, .started = started, .width = columns -| 1, .ascii = cfg.ascii };
+    if (progress) painter.paint(0, lengths);
+    var results = try finder.familiesByLength(gpa, subject, starts, cfg.min_len, max_len, cfg.max_gap, threads, if (progress) painter.hook() else null);
+    defer results.deinit(gpa);
     var len = max_len;
-    var done: usize = 0;
     while (len >= cfg.min_len and len > 0) : (len -= 1) {
-        if (progress) {
-            try stderr.writeAll("\r");
-            try cli.renderProgress(stderr, .{
-                .done = done,
-                .total = lengths,
-                .elapsed_ms = @intCast(started.durationTo(std.Io.Clock.awake.now(io)).toMilliseconds()),
-                .width = columns -| 1,
-                .ascii = cfg.ascii,
-            });
-            try stderr.flush();
-        }
-        const f = try finder.Finder.initAnchored(len, cfg.max_gap);
-        defer f.deinit();
-        const fams = try f.familiesAt(gpa, subject, starts);
-        defer fam.freeFamilies(gpa, fams);
+        const fams = results.forLength(len);
         total += fams.len;
         if (cfg.json) {
             for (fams) |one| {
@@ -125,7 +142,6 @@ pub fn main(init: std.process.Init) !u8 {
                 try cli.writeJsonFamily(out, subject, one);
             }
         } else try cli.writeTsv(out, subject, fams);
-        done += 1;
     }
     if (cfg.json) try out.writeAll("\n]\n");
     try out.flush();
