@@ -13,7 +13,7 @@ cd "$(dirname "$0")" || exit 1
 # Use the flake's hyperfine and jq.
 [ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
 
-readonly BASE_N=11600 MAX_RATIO=2.6 TOLERANCE=25
+readonly BASE_N=11600 MAX_RATIO=2.6 TOLERANCE=25 MAX_THREAD_RSS_MB=4
 # Gates use one thread: they guard algorithmic cost, which thread scheduling would blur.
 readonly ARGS=(-j 1 --min-len 8 --max-len 25 --max-gap 300 --no-progress -o /dev/null)
 fails=0
@@ -64,6 +64,18 @@ for mult in 1 2 4 8; do
 		--argjson user_ms "$user_ms" --argjson mean_ms "$mean_ms" \
 		'{commit: $commit, when: $when, machine: $machine, n: $n, user_ms: $user_ms, mean_ms: $mean_ms}' >>"$log"
 done
+
+# Memory gate: extra threads must not multiply peak RSS (a per-thread 256 KB signal stack
+# once cost ~32 MB at 128 threads). Compare -j 64 against -j 1 on an input large enough for
+# 64 scan chunks (finder.parallel_min_offsets = 16384 offsets per chunk).
+readonly MEM_N=1200000
+bench/gen-corpus "$MEM_N" 1 >"$work/mem.txt"
+rss_kb() { "$(type -P gtime || type -P time)" -f '%M' -o "$work/rss" "$bin" "$@" "$work/mem.txt" >/dev/null 2>&1; cat "$work/rss"; }
+rss1=$(rss_kb -j 1 "${ARGS[@]:2}"); rss64=$(rss_kb -j 64 "${ARGS[@]:2}")
+printf 'N=%-7d peak RSS %d KB at -j 1, %d KB at -j 64\n' "$MEM_N" "$rss1" "$rss64"
+if [ $((rss64 - rss1)) -gt $((MAX_THREAD_RSS_MB * 1024)) ]; then
+	red "MEMORY: -j 64 uses $(((rss64 - rss1) / 1024)) MB more than -j 1 (limit $MAX_THREAD_RSS_MB MB)"; fails=$((fails + 1))
+fi
 
 # Informational: wall-clock with the default thread count at the largest size (logged, not gated).
 hyperfine -N --warmup 2 --runs 10 --style none --export-json "$work/par.json" \

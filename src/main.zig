@@ -9,6 +9,12 @@ const finder = @import("finder.zig");
 const fam = @import("families.zig");
 const arrays = @import("arrays.zig");
 
+/// The default 256 KB per-thread signal stack only serves the segfault handler, which
+/// release builds lack; glibc still zero-fills it for every thread (~32 MB at 128 threads).
+pub const std_options: std.Options = .{
+    .signal_stack_size = if (std.debug.default_enable_segfault_handler) 1 << 18 else null,
+};
+
 /// Terminal width as the OS reports it (console buffer on Windows, TIOCGWINSZ elsewhere),
 /// mirroring std.Progress; null when the query fails.
 fn terminalColumns(io: std.Io, file: std.Io.File) ?usize {

@@ -11,6 +11,8 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] CRITICAL (review): candidate scan walks the whole capture-history chain per start (O(m^2) in tandem/poly-A runs); use an existence-only pattern `(?=([ACGT]{L}).{0,G}?\1)` without capture history.
 - [ ] CRITICAL (review): default --max-len is O(n^2), computed twice, N runs inflate it past PCRE2 limits; decide default (Peter) and compute once.
 - [x] Greedy peel of seed runs (coverage index, O(log n) overlap) keeps welded neighbor arrays apart; union region and deduplicated copies on merge; unit reported from the exact seed. Dev 24/25 88.9%; held-out #1 (now contaminated) 68/71 85.0%. (done 2026-09-26 17:55 EDT)
+- [x] Memory: release builds drop the unused 256 KB per-thread signal stack (46.1 -> 14.4 MB on the 6.5 Mb genome, below PILER-CR 19.7 MB); ./bm gates -j 64 vs -j 1 peak RSS (<= 4 MB extra) on 1.2 Mb; bench/gen-corpus streams in O(N) with byte-identical output. (done 2026-09-26 18:25 EDT)
+- [ ] Memory next: normalize in place (copy record names out first; multi-record name test), keep only seed runs per length, u32 positions; fix the two OOM-path leaks with a failing-allocator sweep.
 - [ ] Review: overflow at max_gap + (max_len - lo); validate --max-gap/--max-len <= 65535; worker errors lose their type.
 - [ ] Review: scoreboard hides tool failures, score.awk drops predictions on truth-less sequences, log lacks tool versions/input checksums/dirty flag.
 - [ ] Review: help text stale (FASTA, IUPAC, -j default, columns); explore ships in the package; differential_test.zig tests an old pattern; bench/gen-corpus is quadratic; full report in CODE_REVIEW.md.
