@@ -66,7 +66,7 @@
 			});
 			devShells = forSystems (system: {
 				default = nixpkgs.legacyPackages.${system}.mkShell {
-					packages = [ nixpkgs.legacyPackages.${system}.zig nixpkgs.legacyPackages.${system}.hyperfine ];
+					packages = with nixpkgs.legacyPackages.${system}; [ zig hyperfine jq ];
 				};
 			});
 		};

@@ -15,7 +15,8 @@ Completed items retire to docs/PLAN_LOG.md. Split out of the pcre2 fork on 2026-
 - [ ] Make the finder as efficient as possible (Peter, 2026-09-25): next profile the 10 ms (process start, candidate scan, per-length compile+JIT), then ./bm with an ndjson log.
 - [x] Peter's "array of multiple matches" is capture history, which the finder already uses via Api.events; nothing further to adopt. (done 2026-09-25 23:50 EDT)
 - [ ] Label families by maximality and Pareto (length vs count) dominance.
-- [ ] ./bm: scaling-ratio gate at N,2N,4N,8N for the finder and the LNRS bound, ndjson log per machine.
+- [x] ./bm: linear-scaling gate (N..8N, 11600-92800 bases, ratio 1.93-2.00) and two-sided 25% per-machine ndjson gate on user time; both gates mutation-checked. (done 2026-09-26 00:20 EDT)
+- [ ] ./bm: add the longestNonOverlappingRepeat bound (default --max-len path) to the scaling gate.
 - [ ] Cross-platform build matrix (Linux/macOS/Windows, aarch64/x86_64) as a Nix check.
 - [x] Repin the fork to 5f6c6088 (capture-history event limit, PCRE2_ERROR_CAPTURE_HISTORY_LIMIT); 58 tests green. (done 2026-09-25 23:35 EDT)
 - [ ] Repin the fork when capture-history changes; the deps hash in flake.nix must be regenerated with it.

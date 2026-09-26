@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Benchmarks for the ReleaseFast dna-repeats package on seeded synthetic DNA.
+#
+# 1. Scaling gate (machine-independent): user time at N, 2N, 4N, 8N bases must grow
+#    about linearly (the finder is O(n*D) for fixed lengths and gap); a doubling
+#    ratio >= MAX_RATIO fails.
+# 2. Constant-factor gate: each run appends to bench/<machine-id>.ndjson and is
+#    compared with this machine's previous entry; a move of more than TOLERANCE
+#    percent either way fails loudly. Rerunning accepts the new baseline.
+#    A machine with no history seeds its baseline and passes.
+set -u
+cd "$(dirname "$0")" || exit 1
+# Use the flake's hyperfine and jq.
+[ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
+
+readonly BASE_N=11600 MAX_RATIO=2.6 TOLERANCE=25
+readonly ARGS=(--min-len 8 --max-len 25 --max-gap 300 --no-progress -o /dev/null)
+fails=0
+red() { printf '\033[1;31m%s\033[0m\n' "$*"; }
+
+out=$(nix build .#default --no-link --print-out-paths) || exit 1
+bin=$out/bin/dna-repeats
+[ -z "${MUTE_DEBUG_STATUS:-}" ] || { red "unset MUTE_DEBUG_STATUS: it would hide a debug build"; exit 1; }
+if "$bin" --about 2>&1 >/dev/null | grep -q 'DEBUG BUILD'; then red "refusing to benchmark a debug build"; exit 1; fi
+
+cpu=$(awk -F': ' '/model name/ {print $2; exit}' /proc/cpuinfo 2>/dev/null || sysctl -n machdep.cpu.brand_string 2>/dev/null)
+machine=$(printf '%s|%s|%s' "$(hostname -s)" "$(uname -m)" "$cpu" | sha256sum | cut -c1-12)
+log=bench/$machine.ndjson
+commit=$(git rev-parse --short HEAD)
+when=$(date -Iseconds)
+work=$(mktemp -d "${TMPDIR:-/tmp}/dna-repeats-bm.XXXXXX") || exit 1
+trap 'rm -r "$work"' EXIT
+
+prev_user=
+for mult in 1 2 4 8; do
+	n=$((BASE_N * mult))
+	bench/gen-corpus "$n" 1 >"$work/c$n.txt"
+	hyperfine -N --warmup 2 --runs 10 --style none --export-json "$work/h$n.json" \
+		"$bin ${ARGS[*]} $work/c$n.txt" >/dev/null 2>&1 || { red "hyperfine failed at N=$n"; exit 1; }
+	# Mean user (CPU) time is steadier than wall-clock for single-threaded compute.
+	user_ms=$(jq '.results[0].user * 1000' "$work/h$n.json")
+	mean_ms=$(jq '.results[0].mean * 1000' "$work/h$n.json")
+	printf 'N=%-6d user %8.2f ms  wall %8.2f ms' "$n" "$user_ms" "$mean_ms"
+	if [ -n "$prev_user" ]; then
+		ratio=$(awk -v a="$user_ms" -v b="$prev_user" 'BEGIN {printf "%.2f", a / b}')
+		printf '  x%s vs N/2' "$ratio"
+		if awk -v r="$ratio" -v m="$MAX_RATIO" 'BEGIN {exit !(r >= m)}'; then
+			printf '\n'; red "SCALING: doubling N multiplied user time by $ratio (limit $MAX_RATIO)"; fails=$((fails + 1)); continue
+		fi
+	fi
+	printf '\n'
+	prev_user=$user_ms
+	last=$(jq -c --argjson n "$n" 'select(.n == $n)' "$log" 2>/dev/null | tail -1)
+	if [ -n "$last" ]; then
+		was=$(jq '.user_ms' <<<"$last")
+		delta=$(awk -v a="$user_ms" -v b="$was" 'BEGIN {printf "%.1f", (a - b) * 100 / b}')
+		if awk -v d="$delta" -v t="$TOLERANCE" 'BEGIN {exit !(d > t || d < -t)}'; then
+			red "CHANGE: N=$n user time moved ${delta}% since $(jq -r .commit <<<"$last") (tolerance ±$TOLERANCE%); rerun to accept"
+			fails=$((fails + 1))
+		fi
+	fi
+	jq -cn --arg commit "$commit" --arg when "$when" --arg machine "$machine" --argjson n "$n" \
+		--argjson user_ms "$user_ms" --argjson mean_ms "$mean_ms" \
+		'{commit: $commit, when: $when, machine: $machine, n: $n, user_ms: $user_ms, mean_ms: $mean_ms}' >>"$log"
+done
+exit "$fails"
