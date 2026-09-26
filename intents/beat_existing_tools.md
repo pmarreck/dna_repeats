@@ -56,6 +56,15 @@ he asked for field-appropriate additions, 2026-09-26, marked "added"):
   (for example exact seeds from the regex, then bounded-mismatch extension).
   It must stay checkable against an independent oracle, as chain_packing is.
 
+## Held-out validation (rule fixed 2026-09-26 15:05 EDT, before any held-out result was seen)
+
+Filters and thresholds are tuned only on the 8 development genomes in nix/benchdata.nix.
+Claims are scored on a held-out set: every CRISPRCasdb sequence with at least one
+evidence-level-4 array, excluding the development accessions, ordered by the SHA-256
+of its accession string, first 30. The set is pinned in nix/benchdata.nix like the
+development genomes. Changing a filter after seeing held-out results means picking
+a fresh held-out set by the same rule (next 30), and saying so in the report.
+
 ## Open questions
 
 - How an array counts as found. Provisional (agent proposal, 2026-09-26, in

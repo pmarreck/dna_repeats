@@ -2,14 +2,20 @@
 # CRISPR scoreboard (intents/beat_existing_tools.md): every tool on every pinned genome,
 # wall time and peak memory from GNU time, recall/precision from bench/score.awk against
 # CRISPRCasdb, appended to bench/scoreboard-<machine-id>.ndjson.
-# usage: bench/scoreboard [TOOL...]   (default: every tool below)
+# usage: bench/scoreboard [--set dev|heldout] [TOOL...]   (default: dev set, every tool below)
+#   dev: the genomes filters are tuned on; heldout: the fixed held-out set used for claims.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 [ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
 
 build() { nix build ".#$1" --no-link --print-out-paths; }
-genomes=$(build genomes) || exit 1
-truth=$(build crisprTruth) || exit 1
+set=dev
+if [ "${1:-}" = "--set" ]; then set=${2:?--set needs dev or heldout}; shift 2; fi
+case $set in
+	dev) genomes=$(build genomes) && truth=$(build crisprTruth) || exit 1 ;;
+	heldout) genomes=$(build heldoutGenomes) && truth=$(build heldoutTruth) || exit 1 ;;
+	*) echo "unknown set: $set" >&2; exit 2 ;;
+esac
 minced=$(build minced)/bin/minced || exit 1
 pilercr=$(build pilercr)/bin/pilercr || exit 1
 dnarepeats=$(build default)/bin/dna-repeats || exit 1
@@ -42,6 +48,7 @@ log=bench/scoreboard-$machine.ndjson
 commit=$(git rev-parse --short HEAD)
 when=$(date -Iseconds)
 
+printf 'set: %s\n' "$set"
 printf '%-16s %9s %8s %9s %9s %9s %10s\n' tool recalled recall predicted precision wall_s peak_MB
 for tool in "${tools[@]}"; do
 	: >"$work/$tool.pred"
@@ -58,8 +65,8 @@ for tool in "${tools[@]}"; do
 	printf '%-16s %5d/%-3d %7.1f%% %9d %8.1f%% %9.2f %10.1f\n' "$tool" "$rec" "$el4" \
 		"$(awk -v a="$rec" -v b="$el4" 'BEGIN {print b ? 100 * a / b : 0}')" "$pred" \
 		"$(awk -v a="$cor" -v b="$pred" 'BEGIN {print b ? 100 * a / b : 0}')" "$wall" "$(awk -v k="$peak" 'BEGIN {print k / 1024}')"
-	jq -cn --arg commit "$commit" --arg when "$when" --arg machine "$machine" --arg tool "$tool" \
+	jq -cn --arg commit "$commit" --arg when "$when" --arg machine "$machine" --arg set "$set" --arg tool "$tool" \
 		--argjson el4 "$el4" --argjson recalled "$rec" --argjson predictions "$pred" --argjson correct "$cor" \
 		--argjson wall_s "$wall" --argjson peak_kb "$peak" \
-		'{commit: $commit, when: $when, machine: $machine, tool: $tool, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, wall_s: $wall_s, peak_kb: $peak_kb}' >>"$log"
+		'{commit: $commit, when: $when, machine: $machine, set: $set, tool: $tool, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, wall_s: $wall_s, peak_kb: $peak_kb}' >>"$log"
 done
