@@ -69,6 +69,13 @@ pub fn build(b: *std.Build) void {
     finder_test_mod.linkLibrary(pcre2.artifact("pcre2-8"));
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = finder_test_mod })).step);
 
+    const arrays_mod = b.createModule(.{
+        .root_source_file = b.path("src/arrays.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = arrays_mod })).step);
+
     const cli_mod = b.createModule(.{
         .root_source_file = b.path("src/cli.zig"),
         .target = target,

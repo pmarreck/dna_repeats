@@ -3,11 +3,36 @@
 Status: accepted (Peter, 2026-09-26: "I want to beat all of them", with the
 choices below answered the same day).
 
-## Outcome
+## Outcome (Peter, 2026-09-26)
 
-For each established tool, run its own task on public genomes. dna_repeats
-wins against a tool when it is faster than that tool at equal or better recall
-against a published annotation, with precision reported alongside.
+1. Reach a Pareto-optimal point on a multidimensional chart against existing
+   tools: undominated on raw speed, precision, recall (legitimate findings), and
+   ability to find more divergent copies, even if not best on every dimension
+   (best on all would be ideal). Each tool is judged on its own task using public
+   genomes and published annotation.
+2. Deliver reproducible measurements and a final report of findings: results
+   against existing tooling, victories, and anything new or interesting.
+3. Deliver a best-in-class, user-friendly CLI for the biotech community.
+
+Scoreboard dimensions (Peter's: speed, precision, recall, divergent-copy tolerance;
+he asked for field-appropriate additions, 2026-09-26, marked "added"):
+- Peak memory (Peter, 2026-09-26: be well-behaved).
+- Boundary accuracy (added): predicted array start/end and copy count vs truth.
+- Repeat consensus accuracy (added): predicted DR vs the annotated consensus.
+- Spacer extraction (added): spacers are what downstream users analyze (phage matching).
+- Negative controls (added): false arrays on shuffled genomes and CRISPR-free genomes.
+- Divergence robustness (added): recall as planted arrays are mutated at rising rates.
+- Fragmented input (added): contigs and metagenome assemblies, where arrays are cut off.
+- Scale (added): throughput on metagenome-sized inputs (gigabases).
+- Orientation (added, later): which strand the array is transcribed from.
+
+## Soft goals (Peter, 2026-09-26)
+
+- Bring positive attention to AI, and to Claude specifically, as a powerful tool in
+  this space.
+- Bring positive attention to Peter as an AI-collaborating human. He tends to avoid
+  the spotlight, so when results are genuinely new and interesting, push him to post
+  them. Claims must be backed by the scoreboard; overstating would defeat both goals.
 
 ## Decisions (Peter, 2026-09-26)
 

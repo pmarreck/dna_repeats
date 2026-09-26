@@ -3,6 +3,7 @@
 Completed items retire to docs/PLAN_LOG.md. Split out of the pcre2 fork on 2026-09-24 (history kept via git subtree split).
 
 Decision (Peter, 2026-09-26): the CLI may import the Zig core directly here; no C FFI/C CLI layer is required for this project.
+Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./test runs zig build test -Doptimize=Debug); benchmarks run ReleaseFast only.
 
 ## Now
 
@@ -14,6 +15,8 @@ Decision (Peter, 2026-09-26): the CLI may import the Zig core directly here; no 
 - [ ] Step 4: reverse-complement strand.
 - [ ] Step 5: bounded-mismatch copies with an independent oracle; then rerun the scoreboard. Treat N and partial IUPAC codes (R, Y, ...) as free mismatches there; exact mode keeps N never-matching (Peter asked, 2026-09-26).
 - [ ] After the PCRE2 path matures: measure a pure-Zig finder's performance ceiling against the fork and report to Peter (Peter, 2026-09-26: fork first).
+- [ ] Final report (Peter, 2026-09-26): Pareto chart of every tool across speed, precision, recall and divergent-copy tolerance, reproducible from bench/scoreboard, with findings and anything new; publish as an artifact.
+- [ ] Best-in-class biotech CLI: standard outputs (GFF3, BED, FASTA of spacers), --crispr preset, clear docs/README, packaging (Nix, static binaries; consider Bioconda).
 - [x] Split the finder, oracle and CLI out of the pcre2 fork into this repository with history; pin the fork by commit bc340132 and build through Nix. (done 2026-09-24 21:50 EDT)
 - [x] CLI conventions: --about, -o/--output with -/@stdout/@stderr, --no-color/--no-ansi/NO_COLOR, --ascii/--simple, TTY progress (--progress/--no-progress), debug banner, tests/cli suite as the Nix cli check in ./test. (done 2026-09-25 23:55 EDT)
 - [ ] Show Peter the rendered progress bar (Unicode and --ascii) and encode the approved look as exact assertions.

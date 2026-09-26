@@ -5,7 +5,7 @@
 		let
 			systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
 			forSystems = nixpkgs.lib.genAttrs systems;
-			# mode: "build" (ReleaseFast package), "test" (zig build test) or "cross" (every release target).
+			# mode: "build" (ReleaseFast package), "debug" (Debug build), "test" (zig build test in Debug) or "cross" (every release target).
 			crossTargets = [ "x86_64-linux-musl" "aarch64-linux-musl" "aarch64-macos" "x86_64-windows-gnu" "aarch64-windows-gnu" ];
 			package = system: mode:
 				let
@@ -40,7 +40,7 @@
 					strictDeps = true;
 					nativeBuildInputs = [ pkgs.zig ];
 					dontConfigure = true;
-					dontFixup = mode != "build";
+					dontFixup = mode != "build" && mode != "debug";
 					buildPhase = ''
 						runHook preBuild
 						export HOME=$TMPDIR
@@ -49,8 +49,10 @@
 						cp -r ${zigDeps}/p "$ZIG_GLOBAL_CACHE_DIR/"
 						chmod -R u+w "$ZIG_GLOBAL_CACHE_DIR"
 						${{
-							test = "zig build test --summary all";
+							# Correctness runs in Debug (all safety checks, leak-checking allocator); benchmarks use ReleaseFast.
+							test = "zig build test -Doptimize=Debug --summary all";
 							build = "zig build -Doptimize=ReleaseFast --prefix $out";
+							debug = "zig build -Doptimize=Debug --prefix $out";
 							cross = nixpkgs.lib.concatMapStringsSep "\n" (t: "zig build -Doptimize=ReleaseFast -Dtarget=${t} --prefix $out/${t}") crossTargets;
 						}.${mode}}
 						runHook postBuild
@@ -66,11 +68,11 @@
 				# Cross-compile the release build for every supported OS/arch.
 				cross = package system "cross";
 				build = self.packages.${system}.default;
-				# CLI surface suite against the ReleaseFast package, plus the scoreboard scorer's fixtures.
+				# CLI surface suite against a Debug build (banner muted), plus the scoreboard scorer's fixtures.
 				cli = nixpkgs.legacyPackages.${system}.runCommand "dna-repeats-cli-tests" {
 					nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bash jq gnugrep gawk coreutils ];
 				} ''
-					bash ${./tests/cli/run} ${self.packages.${system}.default}/bin/dna-repeats
+					MUTE_DEBUG_STATUS=1 bash ${./tests/cli/run} ${package system "debug"}/bin/dna-repeats
 					cd ${self} && bash tests/bench/run
 					touch $out
 				'';
