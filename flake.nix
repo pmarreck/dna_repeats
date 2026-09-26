@@ -16,7 +16,7 @@
 						nativeBuildInputs = [ pkgs.zig pkgs.git pkgs.cacert ];
 						outputHashMode = "recursive";
 						outputHashAlgo = "sha256";
-						outputHash = "sha256-LF1PnI9kzYgD8Nkpug4+Ys+lWW7uTHbeV73e7NhYMik=";
+						outputHash = "sha256-KgwuZxL3Y6ahiD/qCIlc1jS/jvdjYsZw8m4cSe5S948=";
 						dontConfigure = true;
 						dontFixup = true;
 						buildPhase = ''
