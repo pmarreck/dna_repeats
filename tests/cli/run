@@ -158,5 +158,23 @@ printf 'ACGT\n>x\nACGT\n' >"$work/bad.fa"
 capture "$bin" "$work/bad.fa"
 expect_rc $t 1 && expect_eq $t "$err" "dna-repeats: invalid byte 0x3e at input offset 5" && pass $t
 
+# A planted array: 40 random bases, then 4 copies of a 29-base repeat separated by
+# distinct random 30-base spacers, then 40 random bases (integer LCG, same in every awk).
+dr=GTTTCAGTAGAACGTAATCGTGTGGAAAG
+rnd() { awk -v n="$1" -v s="$2" 'BEGIN { split("A C G T", b, " "); for (i = 0; i < n; i++) { s = (s * 16807) % 2147483647; printf "%s", b[1 + s % 4] } }'; }
+{ echo ">arr planted"; echo "$(rnd 40 1)$dr$(rnd 30 2)$dr$(rnd 30 3)$dr$(rnd 30 4)$dr$(rnd 40 5)"; } >"$work/array.fa"
+
+t=crispr-array
+capture "$bin" --crispr "$work/array.fa"
+expect_rc $t 0 && expect_eq $t "$out" "arr	41	246	4	29	$dr" && pass $t
+
+t=arrays-json
+capture "$bin" --crispr --json "$work/array.fa"
+expect_rc $t 0 && expect_eq $t "$(printf '%s' "$out" | jq -c '.[0] | [.record, .start, .end, .copies]')" '["arr",41,246,4]' && pass $t
+
+t=crispr-min-copies-5-finds-none
+capture "$bin" --crispr --min-copies 5 "$work/array.fa"
+expect_rc $t 0 && expect_eq $t "$out" "" && pass $t
+
 printf '%d passed, %d failed\n' "$passes" "$fails"
 exit "$fails"

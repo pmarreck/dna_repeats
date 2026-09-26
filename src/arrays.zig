@@ -10,6 +10,11 @@ pub const Params = struct {
     /// Spacer (bases between consecutive copies) bounds.
     min_spacer: usize = 20,
     max_spacer: usize = 72,
+    /// Most similar spacer pair allowed (positional identity); REP elements, tRNA
+    /// clusters and coding repeats reuse near-identical "spacers".
+    max_spacer_identity: f64 = 0.6,
+    /// Longest unit searched: a repeat still extendable at this length is too long for CRISPR.
+    max_unit: usize = std.math.maxInt(usize),
 };
 
 /// One called array: [start, end) in the record, 0-based.
@@ -29,7 +34,7 @@ pub const Array = struct {
 /// collapse into a single region spanning their union.
 /// complexity: O(F log F + sum of k^2 * spacer length) for F runs of k copies.
 pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Family, params: Params) Allocator.Error![]Array {
-    var runs: std.ArrayList(Array) = .empty;
+    var runs: std.ArrayList(Run) = .empty;
     defer runs.deinit(gpa);
     for (families) |f| {
         var first: usize = 0;
@@ -41,30 +46,77 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
             }
             const copies = f.positions[first .. last + 1];
             if (copies.len >= params.min_copies and spacersDistinct(subject, copies, f.len)) {
-                try runs.append(gpa, .{ .start = copies[0], .end = copies[copies.len - 1] + f.len, .copies = copies.len, .unit_len = f.len, .unit_pos = copies[0] });
+                try runs.append(gpa, .{ .start = copies[0], .end = copies[copies.len - 1] + f.len, .len = f.len, .copies = copies });
             }
             first = last + 1;
         }
     }
-    std.mem.sort(Array, runs.items, {}, lessByStart);
+    std.mem.sort(Run, runs.items, {}, Run.lessByStart);
     var out: std.ArrayList(Array) = .empty;
     errdefer out.deinit(gpa);
-    for (runs.items) |r| {
-        if (out.items.len > 0 and r.start < out.items[out.items.len - 1].end) {
-            const cur = &out.items[out.items.len - 1];
-            cur.end = @max(cur.end, r.end);
-            cur.copies = @max(cur.copies, r.copies);
-            if (r.unit_len > cur.unit_len) {
-                cur.unit_len = r.unit_len;
-                cur.unit_pos = r.unit_pos;
-            }
-        } else try out.append(gpa, r);
+    var i: usize = 0;
+    while (i < runs.items.len) {
+        // One cluster: runs overlapping the growing region, i.e. nested lengths of one array.
+        var end = runs.items[i].end;
+        var best = runs.items[i];
+        var copies = best.copies.len;
+        var j = i + 1;
+        while (j < runs.items.len and runs.items[j].start < end) : (j += 1) {
+            const r = runs.items[j];
+            end = @max(end, r.end);
+            copies = @max(copies, r.copies.len);
+            if (r.len > best.len or (r.len == best.len and r.copies.len > best.copies.len)) best = r;
+        }
+        // Judge the cluster by its longest unit: shorter nested units carry repeat bases into their spacers.
+        if (maxSpacerIdentity(subject, best.copies, best.len) <= params.max_spacer_identity and
+            !(best.len >= params.max_unit and extendable(subject, best.copies, best.len)))
+        {
+            try out.append(gpa, .{ .start = runs.items[i].start, .end = end, .copies = copies, .unit_len = best.len, .unit_pos = best.copies[0] });
+        }
+        i = j;
     }
     return out.toOwnedSlice(gpa);
 }
 
-fn lessByStart(_: void, a: Array, b: Array) bool {
-    return a.start < b.start;
+/// A run of consecutive copies of one family, borrowing its positions.
+const Run = struct {
+    start: usize,
+    end: usize,
+    len: usize,
+    copies: []const usize,
+
+    fn lessByStart(_: void, a: Run, b: Run) bool {
+        return a.start < b.start;
+    }
+};
+
+/// Highest positional identity between any two spacers (matching bases over the longer length).
+fn maxSpacerIdentity(subject: []const u8, copies: []const usize, len: usize) f64 {
+    var best: f64 = 0;
+    for (0..copies.len - 1) |i| {
+        const a = subject[copies[i] + len .. copies[i + 1]];
+        for (i + 1..copies.len - 1) |j| {
+            const b = subject[copies[j] + len .. copies[j + 1]];
+            const longer = @max(a.len, b.len);
+            if (longer == 0) continue;
+            var same: usize = 0;
+            for (a[0..@min(a.len, b.len)], b[0..@min(a.len, b.len)]) |x, y| same += @intFromBool(x == y);
+            best = @max(best, @as(f64, @floatFromInt(same)) / @as(f64, @floatFromInt(longer)));
+        }
+    }
+    return best;
+}
+
+/// True when every copy has the same base just before it, or just after it: the
+/// repeat continues past this unit.
+fn extendable(subject: []const u8, copies: []const usize, len: usize) bool {
+    var left = copies[0] > 0;
+    var right = copies[0] + len < subject.len;
+    for (copies) |p| {
+        left = left and p > 0 and subject[p - 1] == subject[copies[0] - 1];
+        right = right and p + len < subject.len and subject[p + len] == subject[copies[0] + len];
+    }
+    return left or right;
 }
 
 fn spacersDistinct(subject: []const u8, copies: []const usize, len: usize) bool {
@@ -109,7 +161,9 @@ fn callOn(subject: []const u8, params: Params) ![]Array {
         defer testing.allocator.free(fams);
         try all.appendSlice(testing.allocator, fams);
     }
-    return callArrays(testing.allocator, subject, all.items, params);
+    var p = params;
+    p.max_unit = 30;
+    return callArrays(testing.allocator, subject, all.items, p);
 }
 
 test "one array: nested lengths collapse into one region" {
@@ -160,4 +214,45 @@ test "separate arrays are reported separately, in position order" {
     try testing.expectEqual(@as(usize, 2), arrays.len);
     try testing.expectEqual(@as(usize, 40), arrays[0].start);
     try testing.expectEqual(@as(usize, 600), arrays[1].start);
+}
+
+/// Copy `n` bases starting at `from` in `src` into `buf` at `at`, returning at + n.
+fn put(buf: []u8, at: usize, bases: []const u8) usize {
+    @memcpy(buf[at..][0..bases.len], bases);
+    return at + bases.len;
+}
+
+test "near-identical spacers (over max_spacer_identity) are not an array" {
+    var buf: [400]u8 = undefined;
+    fillRandom(&buf, 21);
+    var spacer: [30]u8 = undefined;
+    fillRandom(&spacer, 22);
+    var at: usize = 50;
+    for (0..4) |k| {
+        at = put(&buf, at, dr);
+        if (k == 3) break;
+        var s = spacer;
+        s[k * 7] = if (s[k * 7] == 'A') 'C' else 'A'; // distinct spacers, one base apart
+        at = put(&buf, at, &s);
+    }
+    const arrays = try callOn(&buf, .{});
+    defer testing.allocator.free(arrays);
+    try testing.expectEqual(@as(usize, 0), arrays.len);
+}
+
+test "a repeat longer than max_unit (extendable at the cap) is not an array" {
+    var buf: [500]u8 = undefined;
+    fillRandom(&buf, 23);
+    var long_unit: [40]u8 = undefined; // callOn searches lengths 20..30
+    fillRandom(&long_unit, 24);
+    var at: usize = 50;
+    for (0..3) |k| {
+        at = put(&buf, at, &long_unit);
+        var s: [30]u8 = undefined;
+        fillRandom(&s, 30 + k);
+        at = put(&buf, at, &s);
+    }
+    const arrays = try callOn(&buf, .{});
+    defer testing.allocator.free(arrays);
+    try testing.expectEqual(@as(usize, 0), arrays.len);
 }

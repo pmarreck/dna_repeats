@@ -11,9 +11,11 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [x] Step 1b: nix/benchdata.nix pins 8 genomes and derives CRISPRCasdb truth (46 arrays, 25 at evidence level 4; starts are 1-based). (done 2026-09-26 13:20 EDT)
 - [x] FASTA input: per-record search, record column/field, IUPAC -> N never matched (oracle agrees, exhaustive {A,C,N} differential). E. coli 4.6 Mb in 0.11 s wall. (done 2026-09-26 13:25 EDT)
 - [x] Step 2: bench/scoreboard + tested scorer. First run: MinCED 24/25, 92.3%, 3.81 s, 294 MB; PILER-CR 24/25, 100%, 6.07 s, 19 MB; dna-repeats raw 24/25, 4.4%, 0.76 s, 45 MB. The array all miss (P. furiosus 275806) has <3 good copies. (done 2026-09-26 13:32 EDT)
-- [ ] Step 3: exact-only dna-repeats baseline on the scoreboard (repeat 23-47 bp, spacer <= 72).
+- [x] Step 3: --crispr array caller (runs within spacer bounds, distinct spacers, merged nested lengths; cluster filters: spacer identity <= 0.6, not extendable at the length cap). Scoreboard: 22/25, 97.0% precision, 0.70 s, 46 MB (MinCED 24/25 92.3% 3.81 s; PILER-CR 24/25 100% 6.07 s). (done 2026-09-26 14:20 EDT)
+- [ ] Recall: bridge fragments of one array split by a degraded copy (P. furiosus 623119, S. thermophilus 625101), ahead of full mismatch mode.
 - [ ] Step 4: reverse-complement strand.
 - [ ] Step 5: bounded-mismatch copies with an independent oracle; then rerun the scoreboard. Treat N and partial IUPAC codes (R, Y, ...) as free mismatches there; exact mode keeps N never-matching (Peter asked, 2026-09-26).
+- [ ] Held-out validation: tune filters (spacer identity 0.6, max-length extension) on the 8 dev genomes only; score claims on a separate held-out genome set chosen before looking (anti-overfitting).
 - [ ] After the PCRE2 path matures: measure a pure-Zig finder's performance ceiling against the fork and report to Peter (Peter, 2026-09-26: fork first).
 - [ ] Final report (Peter, 2026-09-26): Pareto chart of every tool across speed, precision, recall and divergent-copy tolerance, reproducible from bench/scoreboard, with findings and anything new; publish as an artifact.
 - [ ] Best-in-class biotech CLI: standard outputs (GFF3, BED, FASTA of spacers), --crispr preset, clear docs/README, packaging (Nix, static binaries; consider Bioconda).

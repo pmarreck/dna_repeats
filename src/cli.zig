@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const fam = @import("families.zig");
+const arrays = @import("arrays.zig");
 
 pub const usage =
     \\Usage: dna-repeats [options] FILE|-|@stdin
@@ -238,6 +239,26 @@ fn writeTsvFields(w: *std.Io.Writer, subject: []const u8, f: fam.Family) !void {
     try w.writeAll("\n");
 }
 
+/// One array per line, 1-based inclusive like GFF and CRISPRCasdb:
+/// [record,] start, end, copies, unit length, unit.
+pub fn writeArraysTsv(w: *std.Io.Writer, record: ?[]const u8, subject: []const u8, list: []const arrays.Array) !void {
+    for (list) |a| {
+        if (record) |r| try w.print("{s}\t", .{r});
+        try w.print("{d}\t{d}\t{d}\t{d}\t{s}\n", .{ a.start + 1, a.end, a.copies, a.unit_len, subject[a.unit_pos..][0..a.unit_len] });
+    }
+}
+
+/// One array as a JSON object (no trailing separator); "record" only for FASTA input.
+pub fn writeJsonArray(w: *std.Io.Writer, record: ?[]const u8, subject: []const u8, a: arrays.Array) !void {
+    try w.writeAll("{");
+    if (record) |r| {
+        try w.writeAll("\"record\":");
+        try std.json.Stringify.encodeJsonString(r, .{}, w);
+        try w.writeAll(",");
+    }
+    try w.print("\"start\":{d},\"end\":{d},\"copies\":{d},\"unit_length\":{d},\"unit\":\"{s}\"}}", .{ a.start + 1, a.end, a.copies, a.unit_len, subject[a.unit_pos..][0..a.unit_len] });
+}
+
 /// Emit one family as a JSON object (no trailing separator).
 pub fn writeJsonFamily(w: *std.Io.Writer, subject: []const u8, f: fam.Family) !void {
     try w.writeAll("{");
@@ -427,6 +448,20 @@ test "FASTA records add a leading record column and a record field" {
     w = .fixed(&buf);
     try writeJsonFamilyRecord(&w, "chr \"1\"", "ACACAC", fams[0]);
     try testing.expectEqualStrings("{\"record\":\"chr \\\"1\\\"\",\"length\":2,\"count\":3,\"unit\":\"AC\",\"positions\":[0,2,4]}", w.buffered());
+}
+
+test "array rendering: 1-based inclusive coordinates, optional record" {
+    const a = [_]arrays.Array{.{ .start = 2, .end = 10, .copies = 3, .unit_len = 2, .unit_pos = 2 }};
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try writeArraysTsv(&w, null, "TTACACACTT", &a);
+    try testing.expectEqualStrings("3\t10\t3\t2\tAC\n", w.buffered());
+    w = .fixed(&buf);
+    try writeArraysTsv(&w, "chr1", "TTACACACTT", &a);
+    try testing.expectEqualStrings("chr1\t3\t10\t3\t2\tAC\n", w.buffered());
+    w = .fixed(&buf);
+    try writeJsonArray(&w, "chr1", "TTACACACTT", a[0]);
+    try testing.expectEqualStrings("{\"record\":\"chr1\",\"start\":3,\"end\":10,\"copies\":3,\"unit_length\":2,\"unit\":\"AC\"}", w.buffered());
 }
 
 test "TSV and JSON rendering" {

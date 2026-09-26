@@ -24,6 +24,8 @@ predict_pilercr() {
 		on && /^>/ {acc = substr($1, 2); next}
 		on && /^ *[0-9]+  / {pos = substr($0, 26, 10) + 0; len = substr($0, 38, 10) + 0; print acc "\t" pos "\t" pos + len - 1}' "$work/pilercr.txt"
 }
+# Array calling with the CRISPR preset.
+predict_dnarepeats() { "$dnarepeats" --no-progress --crispr "$1" 2>/dev/null | awk -F'\t' '{print $1 "\t" $2 "\t" $3}'; }
 # Naive baseline: every family of >= 3 exact copies is one region (step 3 replaces this).
 predict_dnarepeats_raw() {
 	"$dnarepeats" --no-progress --min-len 23 --max-len 47 --max-gap 72 "$1" 2>/dev/null |
@@ -31,7 +33,7 @@ predict_dnarepeats_raw() {
 }
 
 tools=("$@")
-[ ${#tools[@]} -gt 0 ] || tools=(minced pilercr dnarepeats_raw)
+[ ${#tools[@]} -gt 0 ] || tools=(minced pilercr dnarepeats dnarepeats_raw)
 work=$(mktemp -d "${TMPDIR:-/tmp}/scoreboard.XXXXXX") || exit 1
 trap 'rm -r "$work"' EXIT
 cpu=$(awk -F': ' '/model name/ {print $2; exit}' /proc/cpuinfo 2>/dev/null || sysctl -n machdep.cpu.brand_string 2>/dev/null)

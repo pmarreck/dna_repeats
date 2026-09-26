@@ -7,6 +7,7 @@ const cli = @import("cli.zig");
 const norm = @import("normalize.zig");
 const finder = @import("finder.zig");
 const fam = @import("families.zig");
+const arrays = @import("arrays.zig");
 
 /// Terminal width as the OS reports it (console buffer on Windows, TIOCGWINSZ elsewhere),
 /// mirroring std.Progress; null when the query fails.
@@ -168,6 +169,24 @@ pub fn main(init: std.process.Init) !u8 {
         if (progress) painter.paint(0, lengths);
         var results = try finder.familiesByLength(gpa, subject, starts, cfg.min_len, max_len, cfg.max_gap, threads, if (progress) painter.hook() else null);
         defer results.deinit(gpa);
+        if (cfg.arrays) {
+            // Every length's families feed the caller, which merges nested lengths into one array.
+            var all: std.ArrayList(fam.Family) = .empty;
+            defer all.deinit(gpa);
+            for (results.per_length) |fams| try all.appendSlice(gpa, fams);
+            const called = try arrays.callArrays(gpa, subject, all.items, .{ .min_copies = cfg.min_copies, .min_spacer = cfg.min_spacer, .max_spacer = cfg.max_gap, .max_unit = max_len });
+            defer gpa.free(called);
+            total += called.len;
+            const record: ?[]const u8 = if (is_fasta) rec.name else null;
+            if (cfg.json) {
+                for (called) |one| {
+                    try out.writeAll(if (first) "\n" else ",\n");
+                    first = false;
+                    try cli.writeJsonArray(out, record, subject, one);
+                }
+            } else try cli.writeArraysTsv(out, record, subject, called);
+            continue;
+        }
         var len = max_len;
         while (len >= cfg.min_len and len > 0) : (len -= 1) {
             const fams = results.forLength(len);
@@ -191,6 +210,6 @@ pub fn main(init: std.process.Init) !u8 {
     }
     const elapsed = started.durationTo(std.Io.Clock.awake.now(io));
     try paint(stderr, color, "1", try std.fmt.bufPrint(&num, "{d}", .{total}));
-    try stderr.print(" families in {d} ms\n", .{elapsed.toMilliseconds()});
+    try stderr.print(" {s} in {d} ms\n", .{ if (cfg.arrays) "arrays" else "families", elapsed.toMilliseconds() });
     return 0;
 }
