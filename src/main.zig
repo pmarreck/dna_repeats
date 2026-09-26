@@ -8,7 +8,20 @@ const norm = @import("normalize.zig");
 const finder = @import("finder.zig");
 const fam = @import("families.zig");
 
-const default_columns = 80;
+/// Terminal width as the OS reports it (console buffer on Windows, TIOCGWINSZ elsewhere),
+/// mirroring std.Progress; null when the query fails.
+fn terminalColumns(io: std.Io, file: std.Io.File) ?usize {
+    if (comptime builtin.os.tag == .windows) {
+        var info = std.os.windows.CONSOLE.USER_IO.GET_SCREEN_BUFFER_INFO;
+        return switch (info.operate(io, file) catch return null) {
+            .SUCCESS => @intCast(info.Data.dwWindowSize.X),
+            else => null,
+        };
+    }
+    var ws: std.posix.winsize = .{ .row = 0, .col = 0, .xpixel = 0, .ypixel = 0 };
+    const op = io.operate(.{ .device_io_control = .{ .file = file, .code = std.posix.T.IOCGWINSZ, .arg = &ws } }) catch return null;
+    return if (op.device_io_control >= 0) ws.col else null;
+}
 
 /// Wrap `text` in an SGR sequence when color is on.
 fn paint(w: *std.Io.Writer, color: bool, sgr: []const u8, text: []const u8) !void {
@@ -90,7 +103,7 @@ pub fn main(init: std.process.Init) !u8 {
     const color = cli.resolveColor(cfg.color, stderr_tty, no_color_env);
     // Results written to stderr would be interleaved with the progress line.
     const progress = cfg.output != .stderr and cli.resolveProgress(cfg.progress, stderr_tty);
-    const columns = if (env.get("COLUMNS")) |c| std.fmt.parseInt(usize, c, 10) catch default_columns else default_columns;
+    const columns = cli.resolveColumns(env.get("COLUMNS"), if (stderr_tty) terminalColumns(io, stderr_file) else null);
 
     const raw = if (std.mem.eql(u8, cfg.path, "-") or std.mem.eql(u8, cfg.path, "@stdin")) blk: {
         var in_buf: [64 * 1024]u8 = undefined;

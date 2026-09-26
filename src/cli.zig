@@ -180,6 +180,19 @@ pub fn resolveProgress(t: Tristate, is_tty: bool) bool {
     };
 }
 
+pub const default_columns = 80;
+
+/// Progress-line width: a positive COLUMNS wins (lets scripts and tests pin it), then
+/// the terminal's reported width, then 80.
+pub fn resolveColumns(columns_env: ?[]const u8, tty_columns: ?usize) usize {
+    if (columns_env) |s| {
+        const n = std.fmt.parseInt(usize, s, 10) catch 0;
+        if (n > 0) return n;
+    }
+    if (tty_columns) |n| if (n > 0) return n;
+    return default_columns;
+}
+
 /// One family per line: length, count, unit, positions.
 pub fn writeTsv(w: *std.Io.Writer, subject: []const u8, fams: []const fam.Family) !void {
     for (fams) |f| {
@@ -323,6 +336,15 @@ test "auto switches resolve against the terminal, explicit ones win" {
             }
         }
     }
+}
+
+test "terminal width: COLUMNS, then the terminal, then 80" {
+    try testing.expectEqual(@as(usize, 132), resolveColumns("132", 100));
+    try testing.expectEqual(@as(usize, 100), resolveColumns(null, 100));
+    try testing.expectEqual(@as(usize, 100), resolveColumns("wide", 100));
+    try testing.expectEqual(@as(usize, 100), resolveColumns("0", 100));
+    try testing.expectEqual(@as(usize, 80), resolveColumns(null, null));
+    try testing.expectEqual(@as(usize, 80), resolveColumns(null, 0));
 }
 
 test "TSV and JSON rendering" {

@@ -7,7 +7,9 @@ Completed items retire to docs/PLAN_LOG.md. Split out of the pcre2 fork on 2026-
 - [x] Split the finder, oracle and CLI out of the pcre2 fork into this repository with history; pin the fork by commit bc340132 and build through Nix. (done 2026-09-24 21:50 EDT)
 - [x] CLI conventions: --about, -o/--output with -/@stdout/@stderr, --no-color/--no-ansi/NO_COLOR, --ascii/--simple, TTY progress (--progress/--no-progress), debug banner, tests/cli suite as the Nix cli check in ./test. (done 2026-09-25 23:55 EDT)
 - [ ] Show Peter the rendered progress bar (Unicode and --ascii) and encode the approved look as exact assertions.
-- [ ] CLI follow-ups: JSON metadata (stats) on stderr, real terminal width via ioctl instead of COLUMNS/80, Windows /o-style aliases.
+- [x] Real terminal width: COLUMNS, then TIOCGWINSZ / Windows console buffer, then 80; verified in a 50-column pty. (done 2026-09-26 01:08 EDT)
+- [ ] CLI follow-ups: JSON metadata (stats) on stderr; Windows /o-style aliases.
+- [ ] Default --max-len: longestNonOverlappingRepeat is O(n^2) (0.94 s at 46400 bases vs 47 ms search) and a large bound widens the candidate gap. Peter to pick: fixed default (e.g. 25), required flag, or an O(n log n) suffix-array bound.
 - [ ] NEXT after CLI: run lengths 25 down to 8 (one capture-history regex per length, max gap 300, non-overlapping copies; nested shorter repeats are kept) on the corpus, privately; the CLI loop already does this (Peter, 2026-09-25 23:44/23:50 EDT).
 - [x] PCRE2 JIT for the finder (compile-time anchoring): 483 -> 96 ms, 5.0x, synthetic 2900-base corpus, lengths 8..25, gap 300, ReleaseFast, hyperfine. (done 2026-09-26 00:02 EDT)
 - [x] Unanchored scan per length: 91.3 -> 86.4 ms (1.06x). (done 2026-09-26 00:04 EDT)
