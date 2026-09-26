@@ -180,9 +180,7 @@ pub fn main(init: std.process.Init) !u8 {
     for (records) |r| bases += r.seq.len;
     try paint(stderr, color, "1", try std.fmt.bufPrint(&num, "{d}", .{bases}));
     if (is_fasta) try stderr.print(" bases in {d} records", .{records.len}) else try stderr.writeAll(" bases");
-    // Default bound: no family can be longer than the longest non-overlapping repeat.
-    if (cfg.max_len) |m| try stderr.print("; lengths {d}..{d}", .{ cfg.min_len, m }) else if (is_fasta) try stderr.print("; lengths {d}..auto", .{cfg.min_len}) else try stderr.print("; lengths {d}..{d}", .{ cfg.min_len, fam.longestNonOverlappingRepeat(records[0].seq) });
-    try stderr.print("; max gap {d}\n", .{cfg.max_gap});
+    try stderr.print("; lengths {d}..{d}; max gap {d}\n", .{ cfg.min_len, cfg.max_len, cfg.max_gap });
     try stderr.flush();
 
     if (cfg.json) try out.writeAll("[");
@@ -192,7 +190,7 @@ pub fn main(init: std.process.Init) !u8 {
     var painter: ProgressPainter = .{ .w = stderr, .io = io, .started = started, .width = columns -| 1, .ascii = cfg.ascii };
     for (records) |rec| {
         const subject = rec.seq;
-        const max_len = cfg.max_len orelse fam.longestNonOverlappingRepeat(subject);
+        const max_len = cfg.max_len;
         const lengths = if (max_len >= cfg.min_len and max_len > 0) max_len - @max(cfg.min_len, 1) + 1 else 0;
         // One wide-gap scan finds every offset that can start a chain at any length;
         // each length then probes only those offsets, lengths spread over worker threads.

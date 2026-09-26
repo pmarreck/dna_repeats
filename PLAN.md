@@ -9,7 +9,8 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 
 - [x] -o is now safe: output resolving to the input (paths, symlinks) is refused with exit 2; file output goes to an unnamed temp (File.Atomic) renamed only on success, so failed runs never create or truncate the target. Hard links to the input are not detected. (done 2026-09-26 18:40 EDT)
 - [x] Candidate scan uses an existence-only pattern (no capture history/chain): poly-A 40K 1205 -> 12 ms, linear (./bm poly-A gate); normal input ~8% faster; identical candidates by construction and by the exhaustive differentials. (done 2026-09-26 18:50 EDT)
-- [ ] CRITICAL (review): default --max-len is O(n^2), computed twice, N runs inflate it past PCRE2 limits; decide default (Peter) and compute once.
+- [x] Fixed default --max-len 50 (Peter, 2026-09-26: MinCED/PILER-CR/TRF all use fixed bounds); O(n^2) longestNonOverlappingRepeat removed; parser rejects min > max, min 0, and any length/gap (including the widened scan gap) past PCRE2's 65535 quantifier limit. (done 2026-09-26 19:35 EDT)
+- [ ] Precision idea from PILER-CR: spacer length uniformity (min/max >= 0.75) and repeat conservation; validate on held-out #2.
 - [x] Greedy peel of seed runs (coverage index, O(log n) overlap) keeps welded neighbor arrays apart; union region and deduplicated copies on merge; unit reported from the exact seed. Dev 24/25 88.9%; held-out #1 (now contaminated) 68/71 85.0%. (done 2026-09-26 17:55 EDT)
 - [x] Memory: release builds drop the unused 256 KB per-thread signal stack (46.1 -> 14.4 MB on the 6.5 Mb genome, below PILER-CR 19.7 MB); ./bm gates -j 64 vs -j 1 peak RSS (<= 4 MB extra) on 1.2 Mb; bench/gen-corpus streams in O(N) with byte-identical output. (done 2026-09-26 18:25 EDT)
 - [ ] Memory next: normalize in place (copy record names out first; multi-record name test), keep only seed runs per length, u32 positions; fix the two OOM-path leaks with a failing-allocator sweep.

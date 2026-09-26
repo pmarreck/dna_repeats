@@ -10,7 +10,7 @@ pub const usage =
     \\Input: ASCII whitespace and '-' are removed, letters uppercased; anything else is an error.
     \\
     \\  --min-len N          shortest repeat length (default 8)
-    \\  --max-len N          longest repeat length (default: longest non-overlapping repeat)
+    \\  --max-len N          longest repeat length (default 50)
     \\  --max-gap D          most bases between consecutive occurrences (default 400)
     \\  --json               JSON array instead of tab-separated lines
     \\  --arrays             report arrays (merged families, distinct spacers) not families
@@ -44,7 +44,7 @@ pub const Output = union(enum) {
 pub const Config = struct {
     path: []const u8 = "",
     min_len: usize = 8,
-    max_len: ?usize = null,
+    max_len: usize = 50,
     max_gap: usize = 400,
     json: bool = false,
     help: bool = false,
@@ -62,7 +62,10 @@ pub const Config = struct {
     min_spacer: usize = 0,
 };
 
-pub const ParseError = error{ MissingValue, BadNumber, UnknownOption, MissingInput, ExtraInput };
+pub const ParseError = error{ MissingValue, BadNumber, UnknownOption, MissingInput, ExtraInput, EmptyLengthRange };
+
+/// PCRE2 bounded quantifiers ({0,n}, {n}) accept at most this value.
+const max_quantifier = 65535;
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
@@ -135,12 +138,16 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
             i += 1;
             if (i >= args.len) return error.MissingValue;
             const n = std.fmt.parseInt(usize, args[i], 10) catch return error.BadNumber;
+            if (n > max_quantifier) return error.BadNumber;
             if (eql(a, "--min-len")) cfg.min_len = n else if (eql(a, "--max-len")) cfg.max_len = n else cfg.max_gap = n;
         } else {
             return error.UnknownOption;
         }
     }
     if (!have_path and !cfg.help and !cfg.about) return error.MissingInput;
+    if (cfg.min_len == 0 or cfg.min_len > cfg.max_len) return error.EmptyLengthRange;
+    // The candidate scan uses gap max_gap + (max_len - min_len) in one quantifier.
+    if (cfg.max_gap + (cfg.max_len - cfg.min_len) > max_quantifier) return error.BadNumber;
     return cfg;
 }
 
@@ -286,7 +293,7 @@ test "parses options in any order, later wins" {
     try testing.expectEqualStrings("in.txt", cfg.path);
     try testing.expectEqual(@as(usize, 3), cfg.min_len);
     try testing.expectEqual(@as(usize, 20), cfg.max_gap);
-    try testing.expectEqual(@as(?usize, null), cfg.max_len);
+    try testing.expectEqual(@as(usize, 50), cfg.max_len);
     try testing.expect(cfg.json);
 }
 
@@ -333,7 +340,7 @@ test "--arrays, --crispr preset, and array tuning; later wins" {
     const c = try parseArgs(&.{ "x", "--crispr" });
     try testing.expect(c.arrays);
     try testing.expectEqual(@as(usize, 23), c.min_len);
-    try testing.expectEqual(@as(?usize, 47), c.max_len);
+    try testing.expectEqual(@as(usize, 47), c.max_len);
     try testing.expectEqual(@as(usize, 20), c.min_spacer);
     try testing.expectEqual(@as(usize, 72), c.max_gap);
     // Options after the preset override it; options before it are overridden.
@@ -343,6 +350,18 @@ test "--arrays, --crispr preset, and array tuning; later wins" {
     try testing.expectEqual(@as(usize, 2), o.min_copies);
     try testing.expectEqual(@as(usize, 15), o.min_spacer);
     try testing.expectError(error.BadNumber, parseArgs(&.{ "x", "--min-copies", "1" }));
+}
+
+test "length and gap bounds: min <= max, and within PCRE2's 65535 quantifier limit" {
+    try testing.expectError(error.EmptyLengthRange, parseArgs(&.{ "x", "--min-len", "30", "--max-len", "20" }));
+    try testing.expectError(error.EmptyLengthRange, parseArgs(&.{ "x", "--min-len", "0" }));
+    try testing.expectError(error.BadNumber, parseArgs(&.{ "x", "--max-len", "65536" }));
+    try testing.expectError(error.BadNumber, parseArgs(&.{ "x", "--max-gap", "65536" }));
+    try testing.expectEqual(@as(usize, 65535), (try parseArgs(&.{ "x", "--max-gap", "65535", "--min-len", "8", "--max-len", "8" })).max_gap);
+    // The candidate scan widens the gap by max_len - min_len; that sum must fit too.
+    try testing.expectError(error.BadNumber, parseArgs(&.{ "x", "--max-gap", "65535", "--min-len", "8", "--max-len", "9" }));
+    // Checked after all options, so order does not matter.
+    try testing.expectEqual(@as(usize, 60), (try parseArgs(&.{ "x", "--min-len", "55", "--max-len", "60" })).max_len);
 }
 
 test "display switches: later wins" {
