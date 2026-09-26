@@ -98,11 +98,23 @@ pub fn main(init: std.process.Init) !u8 {
     // success, so a failed run never truncates or creates the target.
     var atomic: ?std.Io.File.Atomic = null;
     defer if (atomic) |*a| a.deinit(io);
+    var direct: ?std.Io.File = null;
+    defer if (direct) |f| f.close(io);
     var out_writer = switch (cfg.output) {
         .file => |path| blk: {
             if (sameFile(io, init.arena.allocator(), path, cfg.path)) {
                 try stderr.print("dna-repeats: output {s} would overwrite the input\n", .{path});
                 return 2;
+            }
+            // Devices and pipes (/dev/null, FIFOs) are written directly: a failed run cannot
+            // damage them, and renaming over them would replace the device or pipe.
+            const kind = if (std.Io.Dir.cwd().statFile(io, path, .{})) |st| st.kind else |_| .file;
+            if (kind != .file) {
+                direct = std.Io.Dir.cwd().openFile(io, path, .{ .mode = .write_only }) catch |e| {
+                    try stderr.print("dna-repeats: cannot open {s}: {s}\n", .{ path, @errorName(e) });
+                    return 1;
+                };
+                break :blk direct.?.writer(io, &out_buf);
             }
             atomic = std.Io.Dir.cwd().createFileAtomic(io, path, .{ .replace = true }) catch |e| {
                 try stderr.print("dna-repeats: cannot create {s}: {s}\n", .{ path, @errorName(e) });

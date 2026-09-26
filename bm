@@ -65,6 +65,25 @@ for mult in 1 2 4 8; do
 		'{commit: $commit, when: $when, machine: $machine, n: $n, user_ms: $user_ms, mean_ms: $mean_ms}' >>"$log"
 done
 
+# Worst-case scaling gate: inside a long tandem run (poly-A), doubling N must not more than
+# ~double the time; a candidate scan that walks whole chains per start is quadratic here.
+poly() { awk -v n="$1" 'BEGIN { print ">polyA"; for (i = 0; i < n; i += 60) { l = (n - i < 60) ? n - i : 60; s = ""; for (k = 0; k < l; k++) s = s "A"; print s } }'; }
+prev_poly=
+for pn in 20000 40000; do
+	poly "$pn" >"$work/poly$pn.fa"
+	hyperfine -N --warmup 1 --runs 5 --style none --export-json "$work/poly$pn.json" \
+		"$bin ${ARGS[*]} $work/poly$pn.fa" >/dev/null 2>&1 || { red "hyperfine failed on poly-A $pn"; exit 1; }
+	pu=$(jq '.results[0].user * 1000' "$work/poly$pn.json")
+	printf 'poly-A N=%-6d user %8.2f ms' "$pn" "$pu"
+	if [ -n "$prev_poly" ]; then
+		ratio=$(awk -v a="$pu" -v b="$prev_poly" 'BEGIN {printf "%.2f", a / b}')
+		printf '  x%s vs N/2' "$ratio"
+		awk -v r="$ratio" -v m="$MAX_RATIO" 'BEGIN {exit !(r >= m)}' && { printf '\n'; red "SCALING: poly-A doubling multiplied user time by $ratio (limit $MAX_RATIO)"; fails=$((fails + 1)); }
+	fi
+	printf '\n'
+	prev_poly=$pu
+done
+
 # Memory gate: extra threads must not multiply peak RSS (a per-thread 256 KB signal stack
 # once cost ~32 MB at 128 threads). Compare -j 64 against -j 1 on an input large enough for
 # 64 scan chunks (finder.parallel_min_offsets = 16384 offsets per chunk).

@@ -197,5 +197,16 @@ ln -s "$work/victim2.txt" "$work/alias.tsv"
 capture "$bin" "${run[@]}" -o "$work/alias.tsv" "$work/victim2.txt"
 expect_rc $t 2 && expect_eq $t "$(cat "$work/victim2.txt")" "$(cat "$work/sample.txt")" && pass $t
 
+t=output-to-dev-null
+capture "$bin" "${run[@]}" -o /dev/null "$work/sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "" && pass $t
+
+t=output-to-fifo
+mkfifo "$work/pipe"
+timeout 10 cat "$work/pipe" >"$work/from-pipe.tsv" &
+capture "$bin" "${run[@]}" -o "$work/pipe" "$work/sample.txt"
+wait
+expect_rc $t 0 && expect_eq $t "$(cat "$work/from-pipe.tsv")" "$tsv" && [ -p "$work/pipe" ] && pass $t || fail $t "pipe replaced or content wrong"
+
 printf '%d passed, %d failed\n' "$passes" "$fails"
 exit "$fails"
