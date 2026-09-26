@@ -6,6 +6,8 @@ annotate=[
 	ZIG_RECENT_API_CHANGES.md = Symlink to Peter's Zig 0.14-0.16 API cheatsheet (Obsidian vault)
 	bench = Benchmark inputs and logs: gen-corpus plus <machine-id>.ndjson history
 	bench/gen-corpus = Deterministic synthetic DNA generator (integer LCG in awk) for benchmarks; stats tuned near the private sample
+	bench/score.awk = Scoreboard scorer: union-coverage recall over EL4 arrays, precision over any-level arrays
+	bench/scoreboard = CRISPR scoreboard: opponents and dna-repeats on pinned genomes, time/memory, recall/precision, ndjson log
 	bm = Benchmarks: ReleaseFast package on synthetic DNA; linear-scaling gate plus two-sided per-machine ndjson log
 	build = Builds the ReleaseFast package through Nix
 	build.zig = Zig build graph: oracle, normalizer, finder, CLI and differential tests against the pinned pcre2 fork
@@ -22,5 +24,6 @@ annotate=[
 	src/main.zig = dna-repeats I/O adapter: stdio/file I/O, TTY detection, progress, debug banner; calls finder per length
 	src/normalize.zig = Strict plain-input normalizer plus FASTA parser (records, IUPAC ambiguity -> N)
 	test = Runs all Zig tests and the release build through Nix
+	tests/bench/run = Hand-computed fixture tests for bench/score.awk (run in the Nix cli check)
 	tests/cli/run = Bash CLI surface suite (options, stdio aliases, -o, progress/color); run by the Nix cli check
 ]

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# CRISPR scoreboard (intents/beat_existing_tools.md): every tool on every pinned genome,
+# wall time and peak memory from GNU time, recall/precision from bench/score.awk against
+# CRISPRCasdb, appended to bench/scoreboard-<machine-id>.ndjson.
+# usage: bench/scoreboard [TOOL...]   (default: every tool below)
+set -u
+cd "$(dirname "$0")/.." || exit 1
+[ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
+
+build() { nix build ".#$1" --no-link --print-out-paths; }
+genomes=$(build genomes) || exit 1
+truth=$(build crisprTruth) || exit 1
+minced=$(build minced)/bin/minced || exit 1
+pilercr=$(build pilercr)/bin/pilercr || exit 1
+dnarepeats=$(build default)/bin/dna-repeats || exit 1
+readonly TIME=$(type -P gtime || type -P time) || { echo 'GNU time (gtime/time) not found' >&2; exit 1; }
+
+# Each adapter: $1 = FASTA path; prints "accession<TAB>start<TAB>end" (1-based, inclusive).
+predict_minced() { "$minced" -gff "$1" 2>/dev/null | awk -F'\t' '$3 == "repeat_region" {print $1 "\t" $4 "\t" $5}'; }
+predict_pilercr() {
+	"$pilercr" -in "$1" -out "$work/pilercr.txt" -quiet >/dev/null 2>&1
+	# SUMMARY BY POSITION rows are fixed-width: position at column 26, length at column 38.
+	awk '/^SUMMARY BY POSITION/ {on = 1; next}
+		on && /^>/ {acc = substr($1, 2); next}
+		on && /^ *[0-9]+  / {pos = substr($0, 26, 10) + 0; len = substr($0, 38, 10) + 0; print acc "\t" pos "\t" pos + len - 1}' "$work/pilercr.txt"
+}
+# Naive baseline: every family of >= 3 exact copies is one region (step 3 replaces this).
+predict_dnarepeats_raw() {
+	"$dnarepeats" --no-progress --min-len 23 --max-len 47 --max-gap 72 "$1" 2>/dev/null |
+		awk -F'\t' '$3 >= 3 {n = split($5, p, ","); print $1 "\t" p[1] + 1 "\t" p[n] + $2}'
+}
+
+tools=("$@")
+[ ${#tools[@]} -gt 0 ] || tools=(minced pilercr dnarepeats_raw)
+work=$(mktemp -d "${TMPDIR:-/tmp}/scoreboard.XXXXXX") || exit 1
+trap 'rm -r "$work"' EXIT
+cpu=$(awk -F': ' '/model name/ {print $2; exit}' /proc/cpuinfo 2>/dev/null || sysctl -n machdep.cpu.brand_string 2>/dev/null)
+machine=$(printf '%s|%s|%s' "$(hostname -s)" "$(uname -m)" "$cpu" | sha256sum | cut -c1-12)
+log=bench/scoreboard-$machine.ndjson
+commit=$(git rev-parse --short HEAD)
+when=$(date -Iseconds)
+
+printf '%-16s %9s %8s %9s %9s %9s %10s\n' tool recalled recall predicted precision wall_s peak_MB
+for tool in "${tools[@]}"; do
+	: >"$work/$tool.pred"
+	wall=0 peak=0
+	for fa in "$genomes"/*.fa; do
+		"$TIME" -f '%e %M' -o "$work/time" bash -c "$(declare -f "predict_$tool"); $(declare -p minced pilercr dnarepeats work); predict_$tool '$fa'" >>"$work/$tool.pred"
+		read -r s kb <"$work/time"
+		wall=$(awk -v a="$wall" -v b="$s" 'BEGIN {print a + b}')
+		[ "$kb" -gt "$peak" ] && peak=$kb
+	done
+	score=$(awk -f bench/score.awk "$truth" "$work/$tool.pred" | tail -1)
+	el4=$(sed 's/.*el4=\([0-9]*\).*/\1/' <<<"$score"); rec=$(sed 's/.*recalled=\([0-9]*\).*/\1/' <<<"$score")
+	pred=$(sed 's/.*predictions=\([0-9]*\).*/\1/' <<<"$score"); cor=$(sed 's/.*correct=\([0-9]*\).*/\1/' <<<"$score")
+	printf '%-16s %5d/%-3d %7.1f%% %9d %8.1f%% %9.2f %10.1f\n' "$tool" "$rec" "$el4" \
+		"$(awk -v a="$rec" -v b="$el4" 'BEGIN {print b ? 100 * a / b : 0}')" "$pred" \
+		"$(awk -v a="$cor" -v b="$pred" 'BEGIN {print b ? 100 * a / b : 0}')" "$wall" "$(awk -v k="$peak" 'BEGIN {print k / 1024}')"
+	jq -cn --arg commit "$commit" --arg when "$when" --arg machine "$machine" --arg tool "$tool" \
+		--argjson el4 "$el4" --argjson recalled "$rec" --argjson predictions "$pred" --argjson correct "$cor" \
+		--argjson wall_s "$wall" --argjson peak_kb "$peak" \
+		'{commit: $commit, when: $when, machine: $machine, tool: $tool, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, wall_s: $wall_s, peak_kb: $peak_kb}' >>"$log"
+done

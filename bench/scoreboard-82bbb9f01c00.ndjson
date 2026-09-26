@@ -1,0 +1,3 @@
+{"commit":"209a032","when":"2026-09-26T13:29:45-04:00","machine":"82bbb9f01c00","tool":"minced","el4":25,"recalled":24,"predictions":26,"correct":24,"wall_s":3.81,"peak_kb":301140}
+{"commit":"209a032","when":"2026-09-26T13:29:45-04:00","machine":"82bbb9f01c00","tool":"pilercr","el4":25,"recalled":24,"predictions":29,"correct":29,"wall_s":6.07,"peak_kb":19872}
+{"commit":"209a032","when":"2026-09-26T13:29:45-04:00","machine":"82bbb9f01c00","tool":"dnarepeats_raw","el4":25,"recalled":24,"predictions":36816,"correct":1613,"wall_s":0.76,"peak_kb":46112}

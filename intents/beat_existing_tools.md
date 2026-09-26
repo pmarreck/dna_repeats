@@ -33,5 +33,8 @@ against a published annotation, with precision reported alongside.
 
 ## Open questions
 
-- How an array counts as found (repeat consensus match, position overlap threshold).
+- How an array counts as found. Provisional (agent proposal, 2026-09-26, in
+  bench/score.awk): recall = level-4 arrays whose bases are >= 50% covered by the
+  union of predictions; precision = predictions with >= 50% of their bases inside
+  any CRISPRCasdb array, any level.
 - How many mismatches per copy the approximate mode allows by default.

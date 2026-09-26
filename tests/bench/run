@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Tests for the scoreboard's scorer (bench/score.awk) on hand-computed fixtures.
+set -u
+cd "$(dirname "$0")/../.." || exit 1
+fails=0
+check() { if [ "$2" = "$3" ]; then printf 'ok   %s\n' "$1"; else printf 'FAIL %s: got [%s] want [%s]\n' "$1" "$2" "$3"; fails=$((fails + 1)); fi; }
+
+# Truth: accession, organism, start (1-based), length, orientation, evidence level, DR.
+truth=$'A\torg\t101\t100\t1\t4\tDR\nA\torg\t501\t100\t1\t1\tDR\nA\torg\t1001\t100\t1\t4\tDR\nB\torg\t1\t50\t1\t4\tDR'
+# Predictions: accession, start, end (1-based, inclusive).
+#  A 120-210: covers 81 of the first level-4 array (recalled); 81 of its 91 bases are inside truth (correct).
+#  A 520-530: inside the level-1 array (correct; recall is only over level 4).
+#  A 2000-2100: outside every array (wrong).
+#  A 1001-1040: 40% of the second level-4 array (not recalled); fully inside it (correct).
+#  B has no predictions, so its level-4 array is missed.
+preds=$'A\t120\t210\nA\t520\t530\nA\t2000\t2100\nA\t1001\t1040'
+got=$(${AWK:-awk} -f bench/score.awk <(printf '%s\n' "$truth") <(printf '%s\n' "$preds") | tail -1)
+check totals "$got" $'TOTAL\tel4=3\trecalled=1\tpredictions=4\tcorrect=3'
+
+got=$(${AWK:-awk} -f bench/score.awk <(printf '%s\n' "$truth") <(printf '%s\n' "$preds") | head -1)
+check per-accession "$got" $'A\tel4=2\trecalled=1\tpredictions=4\tcorrect=3'
+
+# Two predictions each covering half of one array jointly recall it (coverage is a union).
+got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tDR\n') <(printf 'C\t1\t50\nC\t51\t100\n') | tail -1)
+check union-coverage "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=2\tcorrect=2'
+
+# Overlapping predictions do not double-count coverage: 1-40 twice is 40%, not 80%.
+got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tDR\n') <(printf 'C\t1\t40\nC\t1\t40\n') | tail -1)
+check no-double-count "$got" $'TOTAL\tel4=1\trecalled=0\tpredictions=2\tcorrect=2'
+
+exit "$fails"

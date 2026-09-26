@@ -66,17 +66,18 @@
 				# Cross-compile the release build for every supported OS/arch.
 				cross = package system "cross";
 				build = self.packages.${system}.default;
-				# CLI surface suite against the ReleaseFast package.
+				# CLI surface suite against the ReleaseFast package, plus the scoreboard scorer's fixtures.
 				cli = nixpkgs.legacyPackages.${system}.runCommand "dna-repeats-cli-tests" {
-					nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bash jq gnugrep coreutils ];
+					nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bash jq gnugrep gawk coreutils ];
 				} ''
 					bash ${./tests/cli/run} ${self.packages.${system}.default}/bin/dna-repeats
+					cd ${self} && bash tests/bench/run
 					touch $out
 				'';
 			});
 			devShells = forSystems (system: {
 				default = nixpkgs.legacyPackages.${system}.mkShell {
-					packages = with nixpkgs.legacyPackages.${system}; [ zig hyperfine jq ];
+					packages = with nixpkgs.legacyPackages.${system}; [ zig hyperfine jq time ];
 				};
 			});
 		};
