@@ -240,15 +240,27 @@ pub fn candidateStarts(gpa: Allocator, subject: []const u8, min_len: usize, max_
     return starts.toOwnedSlice(gpa);
 }
 
-/// Append every offset in [from, until) where the length-`len` chain pattern with gap
-/// `gap` matches, using one unanchored scan over `subject`.
+/// Append every offset in [from, until) where a length-`len` unit has a copy within
+/// `gap` bases after it, using one unanchored scan over `subject`.
+/// The pattern only asks whether one copy exists (no capture history, no chain), so
+/// each start costs at most gap+1 attempts even inside long tandem runs, where walking
+/// the whole chain per start was quadratic. It matches exactly where the chain pattern
+/// does, since that pattern's `++` requires at least one copy.
+/// complexity: O((until - from) * gap) attempts, each an O(len) backreference compare.
 fn scanStarts(gpa: Allocator, subject: []const u8, len: usize, gap: usize, from_start: usize, until: usize, out: *std.ArrayList(usize)) Error!void {
-    const f = try Finder.init(len, gap);
-    defer f.deinit();
-    const ovector = c.pcre2_get_ovector_pointer_8(f.md);
+    var buf: [96]u8 = undefined;
+    const pattern = std.fmt.bufPrint(&buf, "(?s)(?=([ACGT]{{{d}}}).{{0,{d}}}?\\1)", .{ len, gap }) catch return error.Compile;
+    var err: c_int = 0;
+    var off: usize = 0;
+    const code = c.pcre2_compile_8(pattern.ptr, pattern.len, 0, &err, &off, null) orelse return error.Compile;
+    defer c.pcre2_code_free_8(code);
+    _ = c.pcre2_jit_compile_8(code, c.PCRE2_JIT_COMPLETE);
+    const md = c.pcre2_match_data_create_from_pattern_8(code, null) orelse return error.OutOfMemory;
+    defer c.pcre2_match_data_free_8(md);
+    const ovector = c.pcre2_get_ovector_pointer_8(md);
     var from = from_start;
     while (from < until and from + len <= subject.len) {
-        const rc = c.pcre2_match_8(f.code, subject.ptr, subject.len, from, 0, f.md, null);
+        const rc = c.pcre2_match_8(code, subject.ptr, subject.len, from, 0, md, null);
         if (rc == c.PCRE2_ERROR_NOMATCH) break;
         if (rc < 0) return error.MatchFailed;
         if (ovector[0] >= until) break;
