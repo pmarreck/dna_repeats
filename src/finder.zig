@@ -25,8 +25,11 @@ pub const Finder = struct {
         const pattern = std.fmt.bufPrint(&buf, "(*CAPTURE_HISTORY)(?=(?<unit>[ACGT]{{{d}}})(?:(?>[ACGT]{{0,{d}}}?(?<hit>\\k<unit>)))++)", .{ len, max_gap }) catch return error.Compile;
         var err: c_int = 0;
         var off: usize = 0;
-        const code = c.pcre2_compile_8(pattern.ptr, pattern.len, 0, &err, &off, null) orelse return error.Compile;
+        // Anchor at compile time: a match-time PCRE2_ANCHORED would force the interpreter.
+        const code = c.pcre2_compile_8(pattern.ptr, pattern.len, c.PCRE2_ANCHORED, &err, &off, null) orelse return error.Compile;
         errdefer c.pcre2_code_free_8(code);
+        // Best effort: without JIT support pcre2_match falls back to the interpreter.
+        _ = c.pcre2_jit_compile_8(code, c.PCRE2_JIT_COMPLETE);
         const md = c.pcre2_match_data_create_from_pattern_8(code, null) orelse return error.OutOfMemory;
         return .{
             .code = code,
@@ -65,7 +68,7 @@ pub const Finder = struct {
             if (covered_until.get(unit)) |until| {
                 if (start < until) continue;
             }
-            const rc = c.pcre2_match_8(self.code, subject.ptr, subject.len, start, c.PCRE2_ANCHORED, self.md, null);
+            const rc = c.pcre2_match_8(self.code, subject.ptr, subject.len, start, 0, self.md, null);
             if (rc == c.PCRE2_ERROR_NOMATCH) continue;
             if (rc < 0) return error.MatchFailed;
             positions.clearRetainingCapacity();
@@ -102,6 +105,14 @@ fn expectMatchesOracle(subject: []const u8, len: usize, max_gap: usize) !void {
         std.debug.print("\n", .{});
         return error.TestUnexpectedResult;
     }
+}
+
+test "the finder's pattern is JIT-compiled" {
+    const f = try Finder.init(8, 300);
+    defer f.deinit();
+    var jit_size: usize = 0;
+    try testing.expectEqual(@as(c_int, 0), c.pcre2_pattern_info_8(f.code, c.PCRE2_INFO_JITSIZE, &jit_size));
+    try testing.expect(jit_size > 0);
 }
 
 test "hand examples match the oracle" {

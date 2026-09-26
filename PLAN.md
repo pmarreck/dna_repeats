@@ -9,7 +9,8 @@ Completed items retire to docs/PLAN_LOG.md. Split out of the pcre2 fork on 2026-
 - [ ] Show Peter the rendered progress bar (Unicode and --ascii) and encode the approved look as exact assertions.
 - [ ] CLI follow-ups: JSON metadata (stats) on stderr, real terminal width via ioctl instead of COLUMNS/80, Windows /o-style aliases.
 - [ ] NEXT after CLI: run lengths 25 down to 8 (one capture-history regex per length, max gap 300, non-overlapping copies; nested shorter repeats are kept) on the corpus, privately; the CLI loop already does this (Peter, 2026-09-25 23:44/23:50 EDT).
-- [ ] Make the single-regex finder as efficient as possible; measure before/after with hyperfine (Peter, 2026-09-25).
+- [x] PCRE2 JIT for the finder (compile-time anchoring): 483 -> 96 ms, 5.0x, synthetic 2900-base corpus, lengths 8..25, gap 300, ReleaseFast, hyperfine. (done 2026-09-26 00:02 EDT)
+- [ ] Make the single-regex finder as efficient as possible; measure before/after with hyperfine (Peter, 2026-09-25). Next: one unanchored scan per length instead of per-start calls.
 - [x] Peter's "array of multiple matches" is capture history, which the finder already uses via Api.events; nothing further to adopt. (done 2026-09-25 23:50 EDT)
 - [ ] Label families by maximality and Pareto (length vs count) dominance.
 - [ ] ./bm: scaling-ratio gate at N,2N,4N,8N for the finder and the LNRS bound, ndjson log per machine.

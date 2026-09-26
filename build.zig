@@ -37,6 +37,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .@"code-unit-width" = @as([]const u8, "8"),
         .linkage = std.builtin.LinkMode.static,
+        .support_jit = true,
     });
     const pcre2_c = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().addCopyFile(pcre2.path("src/pcre2.h.generic"), "pcre2.h"),

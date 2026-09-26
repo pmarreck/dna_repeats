@@ -4,6 +4,7 @@ annotate=[
 	INTENT.md = Project purpose, constraints and verification
 	PLAN.md = Open work
 	ZIG_RECENT_API_CHANGES.md = Symlink to Peter's Zig 0.14-0.16 API cheatsheet (Obsidian vault)
+	bench/gen-corpus = Deterministic synthetic DNA generator (integer LCG in awk) for benchmarks; stats tuned near the private sample
 	build = Builds the ReleaseFast package through Nix
 	build.zig = Zig build graph: oracle, normalizer, finder, CLI and differential tests against the pinned pcre2 fork
 	build.zig.zon = Package manifest; pins github.com/pmarreck/pcre2 capture-history by commit

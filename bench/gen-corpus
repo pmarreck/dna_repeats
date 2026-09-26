@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Deterministic synthetic DNA for benchmarks: bench/gen-corpus N [SEED]
+# Uniform random bases with occasional (1 in ~300 steps) mutated copies of recent
+# segments (8-20 bases, copied from up to 300 back) so repeat families exist.
+# Integer LCG arithmetic only, so every awk yields identical bytes.
+set -u
+n=${1:?usage: gen-corpus N [SEED]}
+seed=${2:-1}
+awk -v n="$n" -v seed="$seed" 'BEGIN {
+	split("A C G T", b, " ")
+	s = seed % 2147483647; if (s <= 0) s += 2147483646
+	out = ""
+	while (length(out) < n) {
+		s = (s * 16807) % 2147483647
+		if (s % 300 == 0 && length(out) > 340) {
+			s = (s * 16807) % 2147483647; len = 8 + s % 13
+			s = (s * 16807) % 2147483647; back = len + s % 300
+			seg = substr(out, length(out) - back + 1, len)
+			s = (s * 16807) % 2147483647
+			if (s % 3 == 0) { p = 1 + s % len; seg = substr(seg, 1, p - 1) b[1 + int(s / 8) % 4] substr(seg, p + 1) }
+			out = out seg
+		} else {
+			s = (s * 16807) % 2147483647
+			out = out b[1 + s % 4]
+		}
+	}
+	for (i = 1; i <= n; i += 60) print substr(out, i, (i + 59 <= n) ? 60 : n - i + 1)
+}'
