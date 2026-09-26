@@ -95,6 +95,10 @@ pub fn main(init: std.process.Init) !u8 {
     var total: usize = 0;
     const lengths = if (max_len >= cfg.min_len and max_len > 0) max_len - @max(cfg.min_len, 1) + 1 else 0;
     const started = std.Io.Clock.awake.now(io);
+    // One wide-gap scan finds every offset that can start a chain at any length;
+    // each length then probes only those offsets.
+    const starts = try finder.candidateStarts(gpa, subject, cfg.min_len, max_len, cfg.max_gap);
+    defer gpa.free(starts);
     var len = max_len;
     var done: usize = 0;
     while (len >= cfg.min_len and len > 0) : (len -= 1) {
@@ -109,9 +113,9 @@ pub fn main(init: std.process.Init) !u8 {
             });
             try stderr.flush();
         }
-        const f = try finder.Finder.init(len, cfg.max_gap);
+        const f = try finder.Finder.initAnchored(len, cfg.max_gap);
         defer f.deinit();
-        const fams = try f.families(gpa, subject);
+        const fams = try f.familiesAt(gpa, subject, starts);
         defer fam.freeFamilies(gpa, fams);
         total += fams.len;
         if (cfg.json) {
