@@ -25,8 +25,7 @@ pub const Finder = struct {
         const pattern = std.fmt.bufPrint(&buf, "(*CAPTURE_HISTORY)(?=(?<unit>[ACGT]{{{d}}})(?:(?>[ACGT]{{0,{d}}}?(?<hit>\\k<unit>)))++)", .{ len, max_gap }) catch return error.Compile;
         var err: c_int = 0;
         var off: usize = 0;
-        // Anchor at compile time: a match-time PCRE2_ANCHORED would force the interpreter.
-        const code = c.pcre2_compile_8(pattern.ptr, pattern.len, c.PCRE2_ANCHORED, &err, &off, null) orelse return error.Compile;
+        const code = c.pcre2_compile_8(pattern.ptr, pattern.len, 0, &err, &off, null) orelse return error.Compile;
         errdefer c.pcre2_code_free_8(code);
         // Best effort: without JIT support pcre2_match falls back to the interpreter.
         _ = c.pcre2_jit_compile_8(code, c.PCRE2_JIT_COMPLETE);
@@ -48,7 +47,7 @@ pub const Finder = struct {
     /// chain_packing: take each start's regex chain in start order, skipping a start
     /// already inside an accepted member of the same unit. Such starts are skipped
     /// before matching, since the unit is just subject[s..][0..len].
-    /// complexity: O(n) anchored match attempts; each chain step scans up to D+1 gap offsets
+    /// complexity: one unanchored scan, O(n) chain-start attempts; each chain step scans up to D+1 gap offsets
     /// with an O(L) backreference comparison at each.
     pub fn families(self: Finder, gpa: Allocator, subject: []const u8) Error![]fam.Family {
         var out: std.ArrayList(fam.Family) = .empty;
@@ -62,15 +61,20 @@ pub const Finder = struct {
         defer positions.deinit(gpa);
 
         if (self.len == 0 or self.len > subject.len) return out.toOwnedSlice(gpa);
-        var start: usize = 0;
-        while (start + self.len <= subject.len) : (start += 1) {
+        // One unanchored scan: the JIT finds the next chain start itself, so there is
+        // one pcre2_match call per chain rather than one per subject offset.
+        const ovector = c.pcre2_get_ovector_pointer_8(self.md);
+        var from: usize = 0;
+        while (from + self.len <= subject.len) {
+            const rc = c.pcre2_match_8(self.code, subject.ptr, subject.len, from, 0, self.md, null);
+            if (rc == c.PCRE2_ERROR_NOMATCH) break;
+            if (rc < 0) return error.MatchFailed;
+            const start = ovector[0];
+            from = start + 1;
             const unit = subject[start..][0..self.len];
             if (covered_until.get(unit)) |until| {
                 if (start < until) continue;
             }
-            const rc = c.pcre2_match_8(self.code, subject.ptr, subject.len, start, 0, self.md, null);
-            if (rc == c.PCRE2_ERROR_NOMATCH) continue;
-            if (rc < 0) return error.MatchFailed;
             positions.clearRetainingCapacity();
             for (Api.events(self.md)) |ev| {
                 if (ev.group == self.unit_group or ev.group == self.hit_group) try positions.append(gpa, ev.start);
