@@ -31,7 +31,8 @@ the counterexamples that ruled them out are recorded in the pcre2 fork's
   over small subjects (`src/finder.zig` tests).
 - `./test` runs every Zig test through Nix against the pinned fork.
 
-## Non-goals
+## Scope changes
 
-Approximate matching, reverse-complement repeats and biological annotation are
-out of scope unless Peter adds them.
+Approximate matching and reverse-complement repeats became goals on 2026-09-26
+(Peter), as part of [beating existing repeat finders](intents/beat_existing_tools.md).
+Biological annotation remains out of scope unless Peter adds it.
