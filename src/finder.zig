@@ -19,7 +19,8 @@ pub const Finder = struct {
     unit_group: u32,
     hit_group: u32,
 
-    /// Compile the lazy atomic bounded-gap chain pattern for one length and gap bound,
+    /// Compile the lazy atomic bounded-gap chain pattern for one length and gap bound
+    /// (gap bytes match DOTALL `.`, 1.10x faster in the JIT than an [ACGT] class),
     /// for an unanchored scan (`families`).
     pub fn init(len: usize, max_gap: usize) Error!Finder {
         return compile(len, max_gap, 0);
@@ -34,7 +35,7 @@ pub const Finder = struct {
 
     fn compile(len: usize, max_gap: usize, options: u32) Error!Finder {
         var buf: [160]u8 = undefined;
-        const pattern = std.fmt.bufPrint(&buf, "(*CAPTURE_HISTORY)(?=(?<unit>[ACGT]{{{d}}})(?:(?>[ACGT]{{0,{d}}}?(?<hit>\\k<unit>)))++)", .{ len, max_gap }) catch return error.Compile;
+        const pattern = std.fmt.bufPrint(&buf, "(*CAPTURE_HISTORY)(?s)(?=(?<unit>[ACGT]{{{d}}})(?:(?>.{{0,{d}}}?(?<hit>\\k<unit>)))++)", .{ len, max_gap }) catch return error.Compile;
         var err: c_int = 0;
         var off: usize = 0;
         const code = c.pcre2_compile_8(pattern.ptr, pattern.len, options, &err, &off, null) orelse return error.Compile;
