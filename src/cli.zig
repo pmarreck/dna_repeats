@@ -27,7 +27,10 @@ pub const usage =
     \\  -h, --help           this help
     \\
     \\Later options override earlier ones; "--" ends options.
-    \\TSV columns: length, count, unit, comma-separated start offsets (0-based, normalized).
+    \\FASTA input: each record is searched separately and named in a leading column;
+    \\IUPAC ambiguity codes (N, R, Y, ...) are kept as N, which never matches.
+    \\Family TSV: length, count, unit, start offsets (0-based, comma-separated).
+    \\Array TSV: start, end (1-based, inclusive), copies, unit length, unit, copy starts (1-based).
     \\
 ;
 
@@ -247,11 +250,13 @@ fn writeTsvFields(w: *std.Io.Writer, subject: []const u8, f: fam.Family) !void {
 }
 
 /// One array per line, 1-based inclusive like GFF and CRISPRCasdb:
-/// [record,] start, end, copies, unit length, unit.
+/// [record,] start, end, copies, unit length, unit, comma-separated copy starts.
 pub fn writeArraysTsv(w: *std.Io.Writer, record: ?[]const u8, subject: []const u8, list: []const arrays.Array) !void {
     for (list) |a| {
         if (record) |r| try w.print("{s}\t", .{r});
-        try w.print("{d}\t{d}\t{d}\t{d}\t{s}\n", .{ a.start + 1, a.end, a.copies, a.unit_len, subject[a.unit_pos..][0..a.unit_len] });
+        try w.print("{d}\t{d}\t{d}\t{d}\t{s}\t", .{ a.start + 1, a.end, a.copies, a.unit_len, subject[a.unit_pos..][0..a.unit_len] });
+        for (a.positions, 0..) |p, i| try w.print("{s}{d}", .{ if (i == 0) "" else ",", p + 1 });
+        try w.writeAll("\n");
     }
 }
 
@@ -263,7 +268,9 @@ pub fn writeJsonArray(w: *std.Io.Writer, record: ?[]const u8, subject: []const u
         try std.json.Stringify.encodeJsonString(r, .{}, w);
         try w.writeAll(",");
     }
-    try w.print("\"start\":{d},\"end\":{d},\"copies\":{d},\"unit_length\":{d},\"unit\":\"{s}\"}}", .{ a.start + 1, a.end, a.copies, a.unit_len, subject[a.unit_pos..][0..a.unit_len] });
+    try w.print("\"start\":{d},\"end\":{d},\"copies\":{d},\"unit_length\":{d},\"unit\":\"{s}\",\"positions\":[", .{ a.start + 1, a.end, a.copies, a.unit_len, subject[a.unit_pos..][0..a.unit_len] });
+    for (a.positions, 0..) |p, i| try w.print("{s}{d}", .{ if (i == 0) "" else ",", p + 1 });
+    try w.writeAll("]}");
 }
 
 /// Emit one family as a JSON object (no trailing separator).
@@ -469,18 +476,19 @@ test "FASTA records add a leading record column and a record field" {
     try testing.expectEqualStrings("{\"record\":\"chr \\\"1\\\"\",\"length\":2,\"count\":3,\"unit\":\"AC\",\"positions\":[0,2,4]}", w.buffered());
 }
 
-test "array rendering: 1-based inclusive coordinates, optional record" {
-    const a = [_]arrays.Array{.{ .start = 2, .end = 10, .copies = 3, .unit_len = 2, .unit_pos = 2 }};
+test "array rendering: 1-based inclusive coordinates, copy positions, optional record" {
+    var at = [_]usize{ 2, 4, 8 };
+    const a = [_]arrays.Array{.{ .start = 2, .end = 10, .copies = 3, .unit_len = 2, .unit_pos = 2, .positions = &at }};
     var buf: [256]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     try writeArraysTsv(&w, null, "TTACACACTT", &a);
-    try testing.expectEqualStrings("3\t10\t3\t2\tAC\n", w.buffered());
+    try testing.expectEqualStrings("3\t10\t3\t2\tAC\t3,5,9\n", w.buffered());
     w = .fixed(&buf);
     try writeArraysTsv(&w, "chr1", "TTACACACTT", &a);
-    try testing.expectEqualStrings("chr1\t3\t10\t3\t2\tAC\n", w.buffered());
+    try testing.expectEqualStrings("chr1\t3\t10\t3\t2\tAC\t3,5,9\n", w.buffered());
     w = .fixed(&buf);
     try writeJsonArray(&w, "chr1", "TTACACACTT", a[0]);
-    try testing.expectEqualStrings("{\"record\":\"chr1\",\"start\":3,\"end\":10,\"copies\":3,\"unit_length\":2,\"unit\":\"AC\"}", w.buffered());
+    try testing.expectEqualStrings("{\"record\":\"chr1\",\"start\":3,\"end\":10,\"copies\":3,\"unit_length\":2,\"unit\":\"AC\",\"positions\":[3,5,9]}", w.buffered());
 }
 
 test "TSV and JSON rendering" {

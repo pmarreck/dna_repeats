@@ -166,7 +166,7 @@ rnd() { awk -v n="$1" -v s="$2" 'BEGIN { split("A C G T", b, " "); for (i = 0; i
 
 t=crispr-array
 capture "$bin" --crispr "$work/array.fa"
-expect_rc $t 0 && expect_eq $t "$out" "arr	41	246	4	29	$dr" && pass $t
+expect_rc $t 0 && expect_eq $t "$out" "arr	41	246	4	29	$dr	41,100,159,218" && pass $t
 
 t=arrays-json
 capture "$bin" --crispr --json "$work/array.fa"

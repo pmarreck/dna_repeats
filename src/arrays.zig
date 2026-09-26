@@ -34,7 +34,14 @@ pub const Array = struct {
     /// Longest unit among the merged families, and where one copy of it starts.
     unit_len: usize,
     unit_pos: usize,
+    /// Start of every copy, ascending (0-based); owned, see freeArrays.
+    positions: []usize,
 };
+
+pub fn freeArrays(gpa: Allocator, list: []const Array) void {
+    for (list) |a| gpa.free(a.positions);
+    gpa.free(list);
+}
 
 /// Call arrays from families of any lengths: split each family into maximal runs of
 /// consecutive copies whose spacers are within bounds, keep runs with >= min_copies
@@ -87,30 +94,39 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
     // C: merge candidates that overlap after extension (fragments bridged through a
     // degraded copy) into their union; judge each merged array by its best candidate.
     var out: std.ArrayList(Array) = .empty;
-    errdefer out.deinit(gpa);
+    errdefer {
+        for (out.items) |a| gpa.free(a.positions);
+        out.deinit(gpa);
+    }
+    var positions: std.ArrayList(usize) = .empty;
+    defer positions.deinit(gpa);
     var i: usize = 0;
     while (i < cands.items.len) {
         var end = cands.items[i].end;
         var best = cands.items[i];
-        var copies = cands.items[i].copies.len;
+        positions.clearRetainingCapacity();
+        try positions.appendSlice(gpa, cands.items[i].copies);
         var last_copy_end = cands.items[i].end;
         var j = i + 1;
         while (j < cands.items.len and cands.items[j].start < end) : (j += 1) {
             const c = cands.items[j];
             end = @max(end, c.end);
-            // Count only this candidate's copies past those already counted.
+            // Take only this candidate's copies past those already taken.
             for (c.copies) |p| if (p >= last_copy_end) {
-                copies += 1;
+                try positions.append(gpa, p);
                 last_copy_end = p + c.len;
             };
             if (c.copies.len > best.copies.len or (c.copies.len == best.copies.len and c.len > best.len)) best = c;
         }
+        const copies = positions.items.len;
         if (copies >= params.min_copies and
             similarSpacerFraction(subject, best.copies, best.len, params.max_spacer_identity) <= params.max_similar_spacer_fraction and
             selfSimilarity(subject[best.seed..][0..best.len]) <= params.max_unit_self_similarity and
             !(best.len >= params.max_unit and extendable(subject, best.copies, best.len)))
         {
-            try out.append(gpa, .{ .start = cands.items[i].start, .end = end, .copies = copies, .unit_len = best.len, .unit_pos = best.seed });
+            const owned = try gpa.dupe(usize, positions.items);
+            errdefer gpa.free(owned);
+            try out.append(gpa, .{ .start = cands.items[i].start, .end = end, .copies = copies, .unit_len = best.len, .unit_pos = best.seed, .positions = owned });
         }
         i = j;
     }
@@ -316,7 +332,8 @@ test "one array: nested lengths collapse into one region" {
     var buf: [400]u8 = undefined;
     const subject = plant(&buf, 11, &.{ 50, 103, 158, 210 });
     const arrays = try callOn(subject, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
+    try testing.expectEqualSlices(usize, &.{ 50, 103, 158, 210 }, arrays[0].positions);
     try testing.expectEqual(@as(usize, 1), arrays.len);
     try testing.expectEqual(@as(usize, 50), arrays[0].start);
     try testing.expectEqual(@as(usize, 210 + dr.len), arrays[0].end);
@@ -328,7 +345,7 @@ test "fewer than min_copies is not an array" {
     var buf: [400]u8 = undefined;
     const subject = plant(&buf, 12, &.{ 50, 103 });
     const arrays = try callOn(subject, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
 }
 
@@ -336,7 +353,7 @@ test "spacers shorter than min_spacer are not an array" {
     var buf: [400]u8 = undefined;
     const subject = plant(&buf, 13, &.{ 50, 83, 116, 149 }); // 10-base spacers
     const arrays = try callOn(subject, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
 }
 
@@ -348,7 +365,7 @@ test "identical spacers (a tandem repeat of unit plus spacer) are not an array" 
     @memcpy(buf[50..][0..dr.len], dr);
     for (1..4) |k| @memcpy(buf[50 + k * period ..][0..period], buf[50..][0..period]);
     const arrays = try callOn(&buf, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
 }
 
@@ -356,7 +373,7 @@ test "separate arrays are reported separately, in position order" {
     var buf: [900]u8 = undefined;
     const subject = plant(&buf, 15, &.{ 40, 95, 151, 600, 655, 709 });
     const arrays = try callOn(subject, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 2), arrays.len);
     try testing.expectEqual(@as(usize, 40), arrays[0].start);
     try testing.expectEqual(@as(usize, 600), arrays[1].start);
@@ -382,7 +399,7 @@ test "near-identical spacers (over max_spacer_identity) are not an array" {
         at = put(&buf, at, &s);
     }
     const arrays = try callOn(&buf, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
 }
 
@@ -399,7 +416,7 @@ test "a repeat longer than max_unit (extendable at the cap) is not an array" {
         at = put(&buf, at, &s);
     }
     const arrays = try callOn(&buf, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
 }
 
@@ -426,11 +443,12 @@ test "a degraded middle copy is bridged: one array spanning both exact runs" {
     const at = [_]usize{ 50, 103, 157, 212, 266, 320, 374 };
     const subject = plantWith(&buf, 31, &at, 212, &bad);
     const arrays = try callOn(subject, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 1), arrays.len);
     try testing.expectEqual(@as(usize, 50), arrays[0].start);
     try testing.expectEqual(@as(usize, 374 + dr.len), arrays[0].end);
     try testing.expectEqual(@as(usize, 7), arrays[0].copies);
+    try testing.expectEqualSlices(usize, &.{ 50, 103, 157, 212, 266, 320, 374 }, arrays[0].positions);
 }
 
 test "two exact copies plus a degraded third make an array" {
@@ -438,7 +456,7 @@ test "two exact copies plus a degraded third make an array" {
     const bad = degraded(2);
     const subject = plantWith(&buf, 32, &.{ 50, 104, 160 }, 160, &bad);
     const arrays = try callOn(subject, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 1), arrays.len);
     try testing.expectEqual(@as(usize, 3), arrays[0].copies);
     try testing.expectEqual(@as(usize, 160 + dr.len), arrays[0].end);
@@ -449,7 +467,7 @@ test "a copy past max_copy_mismatches is not counted" {
     const bad = degraded(9);
     const subject = plantWith(&buf, 33, &.{ 50, 104, 160 }, 160, &bad);
     const arrays = try callOn(subject, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
 }
 
@@ -465,7 +483,7 @@ test "one duplicated spacer does not veto a long array" {
         if (k < 7) at = put(&buf, at, &spacers[k]);
     }
     const arrays = try callOn(&buf, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 1), arrays.len);
     try testing.expectEqual(@as(usize, 8), arrays[0].copies);
 }
@@ -482,7 +500,7 @@ test "an internally periodic (low-complexity) unit is not an array" {
         if (k < 3) at = put(&buf, at, &s);
     }
     const arrays = try callOn(&buf, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
 }
 
@@ -504,7 +522,7 @@ test "neighboring arrays stay separate when a chance 2-copy run spans the gap be
     @memcpy(buf[a_last + dr.len ..][0..tail.len], &tail);
     @memcpy(buf[b_start + dr.len ..][0..tail.len], &tail);
     const arrays = try callOn(&buf, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 2), arrays.len);
     try testing.expectEqual(a_start, arrays[0].start);
     try testing.expectEqual(@as(usize, 5), arrays[0].copies);
@@ -517,7 +535,7 @@ test "the reported unit is an exact copy, not a degraded one found by extension"
     const bad = degraded(3);
     const subject = plantWith(&buf, 91, &.{ 50, 104, 160, 215 }, 50, &bad);
     const arrays = try callOn(subject, .{});
-    defer testing.allocator.free(arrays);
+    defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 1), arrays.len);
     try testing.expectEqual(@as(usize, 50), arrays[0].start);
     try testing.expectEqual(@as(usize, 4), arrays[0].copies);

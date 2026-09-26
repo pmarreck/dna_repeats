@@ -207,7 +207,7 @@ pub fn main(init: std.process.Init) !u8 {
             defer all.deinit(gpa);
             for (results.per_length) |fams| try all.appendSlice(gpa, fams);
             const called = try arrays.callArrays(gpa, subject, all.items, .{ .min_copies = cfg.min_copies, .min_spacer = cfg.min_spacer, .max_spacer = cfg.max_gap, .max_unit = max_len });
-            defer gpa.free(called);
+            defer arrays.freeArrays(gpa, called);
             total += called.len;
             const record: ?[]const u8 = if (is_fasta) rec.name else null;
             if (cfg.json) {
