@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# CLI surface tests for dna-repeats. Usage: tests/cli/run [path/to/dna-repeats]
+# Every case captures stdout, stderr and the exit code and asserts on all three,
+# so a passing run prints only the per-case results.
+set -u
+
+bin=${1:-${DNA_REPEATS_BIN:-zig-out/bin/dna-repeats}}
+case $bin in /*) ;; *) bin=$PWD/$bin ;; esac
+work=$(mktemp -d "${TMPDIR:-/tmp}/dna-repeats-cli.XXXXXX") || exit 1
+trap 'rm -r "$work"' EXIT
+fails=0
+passes=0
+
+# capture CMD...: sets $out, $err and $rc for one invocation.
+capture() {
+	"$@" >"$work/stdout" 2>"$work/stderr"
+	rc=$?
+	out=$(cat "$work/stdout")
+	err=$(cat "$work/stderr")
+}
+
+pass() { passes=$((passes + 1)); printf 'ok   %s\n' "$1"; }
+fail() { fails=$((fails + 1)); printf 'FAIL %s: %s\n' "$1" "$2"; }
+
+expect_rc() { [ "$rc" -eq "$2" ] || { fail "$1" "exit $rc, want $2 (stderr: $err)"; return 1; }; }
+expect_eq() { [ "$2" = "$3" ] || { fail "$1" "got [$2] want [$3]"; return 1; }; }
+expect_has() { case "$2" in *"$3"*) ;; *) fail "$1" "[$2] lacks [$3]"; return 1 ;; esac; }
+expect_lacks() { case "$2" in *"$3"*) fail "$1" "[$2] contains [$3]"; return 1 ;; esac; }
+
+esc=$'\033'
+summary_re='^[0-9]+ bases; lengths 4\.\.10; max gap 5
+[0-9]+ families in [0-9]+ ms$'
+printf 'ACGTACGTAC\nGTACGTTTTACGTACGTA\n' >"$work/sample.txt"
+mkdir "$work/dir with space"
+cp "$work/sample.txt" "$work/dir with space/my sample.txt"
+cp "$work/sample.txt" "$work/--json"
+run=(--min-len 4 --max-gap 5)
+
+t=help
+capture "$bin" --help
+expect_rc $t 0 && expect_has $t "$out" "Usage: dna-repeats" && expect_eq $t "$err" "" && pass $t
+
+t=short-help
+capture "$bin" -h
+expect_rc $t 0 && expect_has $t "$out" "--about" && pass $t
+
+t=about
+capture "$bin" --about
+expect_rc $t 0 && expect_eq $t "$err" "" &&
+	[[ $out =~ ^dna-repeats\ [0-9]+\.[0-9]+\.[0-9]+\ .*\([a-z0-9_]+-[a-z0-9_]+\)$ ]] && pass $t || fail $t "bad about line [$out]"
+
+t=missing-input
+capture "$bin"
+expect_rc $t 2 && expect_has $t "$err" "MissingInput" && expect_eq $t "$out" "" && pass $t
+
+t=unknown-option
+capture "$bin" --frobnicate x
+expect_rc $t 2 && expect_has $t "$err" "UnknownOption" && pass $t
+
+t=missing-file
+capture "$bin" "$work/nope.txt"
+expect_rc $t 1 && expect_has $t "$err" "cannot read" && pass $t
+
+t=invalid-byte
+printf 'ACGTN\n' >"$work/bad.txt"
+capture "$bin" "$work/bad.txt"
+expect_rc $t 1 && expect_eq $t "$err" "dna-repeats: invalid byte 0x4e at input offset 4" && pass $t
+
+t=tsv
+capture "$bin" "${run[@]}" "$work/sample.txt"
+tsv=$out
+expect_rc $t 0 && expect_has $t "$out" $'4\t6\tACGT\t0,4,8,12,19,23' &&
+	expect_eq $t "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" 20 &&
+	[[ $err =~ $summary_re ]] && pass $t || fail $t "summary [$err]"
+
+t=stdin-dash
+capture "$bin" "${run[@]}" - <"$work/sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "$tsv" && pass $t
+
+t=stdin-at
+capture "$bin" "${run[@]}" @stdin <"$work/sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "$tsv" && pass $t
+
+t=path-with-spaces
+capture "$bin" "${run[@]}" "$work/dir with space/my sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "$tsv" && pass $t
+
+t=double-dash-ends-options
+pushd "$work" >/dev/null || exit 1
+capture "$bin" "${run[@]}" -- --json
+popd >/dev/null || exit 1
+expect_rc $t 0 && expect_eq $t "$out" "$tsv" && pass $t
+
+t=output-file
+capture "$bin" "${run[@]}" -o "$work/dir with space/out.tsv" "$work/sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "" && expect_eq $t "$(cat "$work/dir with space/out.tsv")" "$tsv" && pass $t
+
+t=output-dash
+capture "$bin" "${run[@]}" --output - "$work/sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "$tsv" && pass $t
+
+t=output-at-stdout
+capture "$bin" "${run[@]}" -o @stdout "$work/sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "$tsv" && pass $t
+
+t=output-at-stderr
+capture "$bin" "${run[@]}" -o @stderr "$work/sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "" && expect_has $t "$err" $'4\t6\tACGT\t0,4,8,12,19,23' && pass $t
+
+t=output-later-wins
+capture "$bin" "${run[@]}" -o "$work/unused.tsv" -o - "$work/sample.txt"
+expect_rc $t 0 && expect_eq $t "$out" "$tsv" && [ ! -e "$work/unused.tsv" ] && pass $t || fail $t "earlier -o file was created"
+
+t=output-unwritable
+capture "$bin" "${run[@]}" -o "$work/no such dir/x.tsv" "$work/sample.txt"
+expect_rc $t 1 && expect_has $t "$err" "cannot create" && pass $t
+
+t=json
+capture "$bin" "${run[@]}" --json "$work/sample.txt"
+expect_rc $t 0 && expect_has $t "$out" '{"length":4,"count":6,"unit":"ACGT","positions":[0,4,8,12,19,23]}' &&
+	expect_eq $t "$(printf '%s' "$out" | jq length)" 20 && pass $t
+
+t=not-a-tty-means-plain
+capture "$bin" "${run[@]}" "$work/sample.txt"
+expect_lacks $t "$err" "$esc" && expect_lacks $t "$err" $'\r' && pass $t
+
+t=forced-progress-ascii
+capture "$bin" "${run[@]}" --progress --ascii "$work/sample.txt"
+expect_rc $t 0 && expect_has $t "$err" "] 0/7 0% " && expect_has $t "$err" "] 6/7 85% " &&
+	expect_lacks $t "$err" "$esc" && expect_eq $t "$out" "$tsv" &&
+	LC_ALL=C grep -q '[^[:print:][:space:]]' "$work/stderr" && fail $t "non-ASCII byte in --ascii stderr" || pass $t
+
+t=forced-progress-unicode
+capture "$bin" "${run[@]}" --progress --no-color "$work/sample.txt"
+expect_rc $t 0 && expect_has $t "$err" "█" && expect_lacks $t "$err" "$esc" && pass $t
+
+t=progress-later-wins
+capture "$bin" "${run[@]}" --progress --no-progress "$work/sample.txt"
+expect_rc $t 0 && [[ $err =~ $summary_re ]] && pass $t || fail $t "unexpected stderr [$err]"
+
+t=progress-off-when-results-on-stderr
+capture "$bin" "${run[@]}" --progress -o @stderr "$work/sample.txt"
+expect_rc $t 0 && expect_lacks $t "$err" "0/7" && pass $t
+
+printf '%d passed, %d failed\n' "$passes" "$fails"
+exit "$fails"

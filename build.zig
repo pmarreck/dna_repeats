@@ -84,6 +84,9 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("pcre2_c", pcre2_c_mod);
     exe_mod.addImport("pcre2_capture_history", pcre2.module("pcre2_capture_history"));
     exe_mod.linkLibrary(pcre2.artifact("pcre2-8"));
+    const build_opts = b.addOptions();
+    build_opts.addOption([]const u8, "version", "0.1.0");
+    exe_mod.addOptions("build_options", build_opts);
     const exe = b.addExecutable(.{ .name = "dna-repeats", .root_module = exe_mod });
     b.installArtifact(exe);
     const run_exe = b.addRunArtifact(exe);

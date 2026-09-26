@@ -56,6 +56,13 @@
 			checks = forSystems (system: {
 				test = package system true;
 				build = self.packages.${system}.default;
+				# CLI surface suite against the ReleaseFast package.
+				cli = nixpkgs.legacyPackages.${system}.runCommand "dna-repeats-cli-tests" {
+					nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bash jq gnugrep coreutils ];
+				} ''
+					bash ${./tests/cli/run} ${self.packages.${system}.default}/bin/dna-repeats
+					touch $out
+				'';
 			});
 			devShells = forSystems (system: {
 				default = nixpkgs.legacyPackages.${system}.mkShell {

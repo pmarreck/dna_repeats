@@ -4,19 +4,36 @@ const std = @import("std");
 const fam = @import("families.zig");
 
 pub const usage =
-    \\Usage: dna-repeats [options] FILE|-
+    \\Usage: dna-repeats [options] FILE|-|@stdin
     \\Find gap-constrained repeat families (chain_packing rule) in an A/C/G/T corpus.
     \\Input: ASCII whitespace and '-' are removed, letters uppercased; anything else is an error.
     \\
-    \\  --min-len N   shortest repeat length (default 8)
-    \\  --max-len N   longest repeat length (default: longest non-overlapping repeat)
-    \\  --max-gap D   most bases between consecutive occurrences (default 400)
-    \\  --json        JSON array instead of tab-separated lines
-    \\  -h, --help    this help
+    \\  --min-len N          shortest repeat length (default 8)
+    \\  --max-len N          longest repeat length (default: longest non-overlapping repeat)
+    \\  --max-gap D          most bases between consecutive occurrences (default 400)
+    \\  --json               JSON array instead of tab-separated lines
+    \\  -o, --output PATH    write results to PATH ('-' or @stdout: stdout; @stderr: stderr)
+    \\  --progress           always show progress on stderr
+    \\  --no-progress        never show progress (default: only when stderr is a terminal)
+    \\  --no-color           no ANSI color on stderr (alias --no-ansi; NO_COLOR is honored)
+    \\  --ascii              plain ASCII, no color or Unicode symbols (alias --simple)
+    \\  --about              one-line description, version and platform
+    \\  -h, --help           this help
     \\
+    \\Later options override earlier ones; "--" ends options.
     \\TSV columns: length, count, unit, comma-separated start offsets (0-based, normalized).
     \\
 ;
+
+/// Three-way switch: auto defers to the terminal (TTY, NO_COLOR); on/off are explicit.
+pub const Tristate = enum { auto, on, off };
+
+/// Where results go; stdout is the default.
+pub const Output = union(enum) {
+    stdout,
+    stderr,
+    file: []const u8,
+};
 
 pub const Config = struct {
     path: []const u8 = "",
@@ -25,9 +42,25 @@ pub const Config = struct {
     max_gap: usize = 400,
     json: bool = false,
     help: bool = false,
+    about: bool = false,
+    output: Output = .stdout,
+    color: Tristate = .auto,
+    progress: Tristate = .auto,
+    ascii: bool = false,
 };
 
 pub const ParseError = error{ MissingValue, BadNumber, UnknownOption, MissingInput, ExtraInput };
+
+fn eql(a: []const u8, b: []const u8) bool {
+    return std.mem.eql(u8, a, b);
+}
+
+/// Map an output-path argument to a destination; '-', @stdout and @stderr are stdio.
+fn parseOutput(arg: []const u8) Output {
+    if (eql(arg, "-") or eql(arg, "@stdout")) return .stdout;
+    if (eql(arg, "@stderr")) return .stderr;
+    return .{ .file = arg };
+}
 
 /// Later options override earlier ones; "--" ends options.
 pub fn parseArgs(args: []const []const u8) ParseError!Config {
@@ -37,27 +70,105 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
     var options_done = false;
     while (i < args.len) : (i += 1) {
         const a = args[i];
-        if (!options_done and std.mem.eql(u8, a, "--")) {
-            options_done = true;
-        } else if (!options_done and (std.mem.eql(u8, a, "-h") or std.mem.eql(u8, a, "--help"))) {
-            cfg.help = true;
-        } else if (!options_done and std.mem.eql(u8, a, "--json")) {
-            cfg.json = true;
-        } else if (!options_done and (std.mem.eql(u8, a, "--min-len") or std.mem.eql(u8, a, "--max-len") or std.mem.eql(u8, a, "--max-gap"))) {
-            i += 1;
-            if (i >= args.len) return error.MissingValue;
-            const n = std.fmt.parseInt(usize, args[i], 10) catch return error.BadNumber;
-            if (std.mem.eql(u8, a, "--min-len")) cfg.min_len = n else if (std.mem.eql(u8, a, "--max-len")) cfg.max_len = n else cfg.max_gap = n;
-        } else if (!options_done and a.len > 1 and a[0] == '-') {
-            return error.UnknownOption;
-        } else {
+        if (options_done or a.len < 2 or a[0] != '-') {
             if (have_path) return error.ExtraInput;
             cfg.path = a;
             have_path = true;
+        } else if (eql(a, "--")) {
+            options_done = true;
+        } else if (eql(a, "-h") or eql(a, "--help")) {
+            cfg.help = true;
+        } else if (eql(a, "--about")) {
+            cfg.about = true;
+        } else if (eql(a, "--json")) {
+            cfg.json = true;
+        } else if (eql(a, "--progress")) {
+            cfg.progress = .on;
+        } else if (eql(a, "--no-progress")) {
+            cfg.progress = .off;
+        } else if (eql(a, "--no-color") or eql(a, "--no-ansi")) {
+            cfg.color = .off;
+        } else if (eql(a, "--ascii") or eql(a, "--simple")) {
+            cfg.ascii = true;
+            cfg.color = .off;
+        } else if (eql(a, "-o") or eql(a, "--output")) {
+            i += 1;
+            if (i >= args.len) return error.MissingValue;
+            cfg.output = parseOutput(args[i]);
+        } else if (eql(a, "--min-len") or eql(a, "--max-len") or eql(a, "--max-gap")) {
+            i += 1;
+            if (i >= args.len) return error.MissingValue;
+            const n = std.fmt.parseInt(usize, args[i], 10) catch return error.BadNumber;
+            if (eql(a, "--min-len")) cfg.min_len = n else if (eql(a, "--max-len")) cfg.max_len = n else cfg.max_gap = n;
+        } else {
+            return error.UnknownOption;
         }
     }
-    if (!have_path and !cfg.help) return error.MissingInput;
+    if (!have_path and !cfg.help and !cfg.about) return error.MissingInput;
     return cfg;
+}
+
+/// The --about line: name, version, purpose and the os-arch this binary was built for.
+pub fn writeAbout(w: *std.Io.Writer, version: []const u8, os: []const u8, arch: []const u8) !void {
+    try w.print("dna-repeats {s} finds gap-constrained DNA repeat families with PCRE2 capture history ({s}-{s})\n", .{ version, os, arch });
+}
+
+pub const Progress = struct {
+    done: usize,
+    total: usize,
+    elapsed_ms: u64,
+    /// Terminal columns available; the line never exceeds this.
+    width: usize,
+    ascii: bool,
+};
+
+/// Format a millisecond duration as "4.2s" under a minute, else "3m07s".
+fn writeDuration(w: *std.Io.Writer, ms: u64) !void {
+    if (ms < 60_000) return w.print("{d}.{d}s", .{ ms / 1000, ms % 1000 / 100 });
+    const s = ms / 1000;
+    try w.print("{d}m{d:0>2}s", .{ s / 60, s % 60 });
+}
+
+/// One progress line (no newline or carriage return): a bar sized to fill `width`,
+/// then done/total, percent, elapsed and a linear-rate ETA. Pure: time is injected.
+pub fn renderProgress(w: *std.Io.Writer, p: Progress) !void {
+    var tail_buf: [96]u8 = undefined;
+    var tail: std.Io.Writer = .fixed(&tail_buf);
+    const pct = if (p.total == 0) 100 else p.done * 100 / p.total;
+    try tail.print(" {d}/{d} {d}% ", .{ p.done, p.total, pct });
+    try writeDuration(&tail, p.elapsed_ms);
+    if (p.done == 0 or p.total < p.done) {
+        try tail.writeAll(" ETA --");
+    } else {
+        try tail.writeAll(" ETA ");
+        try writeDuration(&tail, p.elapsed_ms * (p.total - p.done) / p.done);
+    }
+    const text = tail.buffered();
+    const frame = 2; // the bar's brackets
+    const bar = if (p.width > text.len + frame) p.width - text.len - frame else 0;
+    const filled = if (p.total == 0) bar else bar * @min(p.done, p.total) / p.total;
+    try w.writeAll(if (p.ascii) "[" else "▕");
+    for (0..bar) |i| try w.writeAll(if (i < filled) (if (p.ascii) "#" else "█") else (if (p.ascii) "." else "░"));
+    try w.writeAll(if (p.ascii) "]" else "▏");
+    try w.writeAll(if (bar > 0) text else text[0..@min(text.len, p.width -| frame)]);
+}
+
+/// ANSI color on stderr: explicit flags win; auto means a terminal with NO_COLOR unset.
+pub fn resolveColor(t: Tristate, is_tty: bool, no_color_env: bool) bool {
+    return switch (t) {
+        .on => true,
+        .off => false,
+        .auto => is_tty and !no_color_env,
+    };
+}
+
+/// Progress on stderr: explicit flags win; auto means stderr is a terminal.
+pub fn resolveProgress(t: Tristate, is_tty: bool) bool {
+    return switch (t) {
+        .on => true,
+        .off => false,
+        .auto => is_tty,
+    };
 }
 
 /// One family per line: length, count, unit, positions.
@@ -100,6 +211,101 @@ test "argument errors are classified" {
     try testing.expectError(error.UnknownOption, parseArgs(&.{ "x", "--frobnicate" }));
     try testing.expectError(error.ExtraInput, parseArgs(&.{ "a", "b" }));
     try testing.expect((try parseArgs(&.{"--help"})).help);
+}
+
+test "--about and output destinations" {
+    try testing.expect((try parseArgs(&.{"--about"})).about);
+    try testing.expectEqual(Output.stdout, (try parseArgs(&.{"x"})).output);
+    try testing.expectEqual(Output.stdout, (try parseArgs(&.{ "x", "-o", "-" })).output);
+    try testing.expectEqual(Output.stdout, (try parseArgs(&.{ "x", "--output", "@stdout" })).output);
+    try testing.expectEqual(Output.stderr, (try parseArgs(&.{ "x", "-o", "@stderr" })).output);
+    const cfg = try parseArgs(&.{ "x", "-o", "a.tsv", "--output", "out dir/b.tsv" });
+    try testing.expectEqualStrings("out dir/b.tsv", cfg.output.file);
+    try testing.expectError(error.MissingValue, parseArgs(&.{ "x", "-o" }));
+}
+
+test "display switches: later wins" {
+    const d = try parseArgs(&.{"x"});
+    try testing.expectEqual(Tristate.auto, d.color);
+    try testing.expectEqual(Tristate.auto, d.progress);
+    try testing.expect(!d.ascii);
+    try testing.expectEqual(Tristate.off, (try parseArgs(&.{ "x", "--no-color" })).color);
+    try testing.expectEqual(Tristate.off, (try parseArgs(&.{ "x", "--no-ansi" })).color);
+    try testing.expectEqual(Tristate.on, (try parseArgs(&.{ "x", "--no-progress", "--progress" })).progress);
+    try testing.expectEqual(Tristate.off, (try parseArgs(&.{ "x", "--progress", "--no-progress" })).progress);
+    // --ascii/--simple also drop ANSI.
+    const s = try parseArgs(&.{ "x", "--simple" });
+    try testing.expect(s.ascii);
+    try testing.expectEqual(Tristate.off, s.color);
+    try testing.expect((try parseArgs(&.{ "x", "--ascii" })).ascii);
+}
+
+test "--about is one line with version and platform" {
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try writeAbout(&w, "1.2.3", "linux", "x86_64");
+    const line = w.buffered();
+    try testing.expect(std.mem.startsWith(u8, line, "dna-repeats 1.2.3 "));
+    try testing.expect(std.mem.endsWith(u8, line, " (linux-x86_64)\n"));
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, line, "\n"));
+}
+
+/// Display columns of UTF-8 text without ANSI escapes (one column per code point).
+fn displayWidth(s: []const u8) usize {
+    var cols: usize = 0;
+    var i: usize = 0;
+    while (i < s.len) {
+        if (s[i] == 0x1b) {
+            while (i < s.len and s[i] != 'm') i += 1;
+            i += 1;
+            continue;
+        }
+        if (s[i] & 0xc0 != 0x80) cols += 1;
+        i += 1;
+    }
+    return cols;
+}
+
+test "progress line: counts, percent, ETA and width" {
+    var buf: [512]u8 = undefined;
+    inline for (.{ false, true }) |ascii| {
+        inline for (.{ 40, 60, 100 }) |width| {
+            var w: std.Io.Writer = .fixed(&buf);
+            try renderProgress(&w, .{ .done = 10, .total = 40, .elapsed_ms = 2000, .width = width, .ascii = ascii });
+            const line = w.buffered();
+            try testing.expect(std.mem.indexOf(u8, line, "10/40") != null);
+            try testing.expect(std.mem.indexOf(u8, line, "25%") != null);
+            // 10 of 40 in 2.0s leaves 30 at the same rate: 6.0s.
+            try testing.expect(std.mem.indexOf(u8, line, "ETA 6.0s") != null);
+            try testing.expect(displayWidth(line) <= width);
+            if (ascii) for (line) |b| try testing.expect(b < 0x80);
+        }
+    }
+    var w: std.Io.Writer = .fixed(&buf);
+    try renderProgress(&w, .{ .done = 0, .total = 5, .elapsed_ms = 0, .width = 80, .ascii = true });
+    try testing.expect(std.mem.indexOf(u8, w.buffered(), "ETA --") != null);
+}
+
+test "auto switches resolve against the terminal, explicit ones win" {
+    // Classifier over the whole input space: (tristate, tty, NO_COLOR set).
+    for ([_]Tristate{ .auto, .on, .off }) |t| {
+        for ([_]bool{ false, true }) |tty| {
+            for ([_]bool{ false, true }) |no_color| {
+                const want_color = switch (t) {
+                    .on => true,
+                    .off => false,
+                    .auto => tty and !no_color,
+                };
+                try testing.expectEqual(want_color, resolveColor(t, tty, no_color));
+                const want_progress = switch (t) {
+                    .on => true,
+                    .off => false,
+                    .auto => tty,
+                };
+                try testing.expectEqual(want_progress, resolveProgress(t, tty));
+            }
+        }
+    }
 }
 
 test "TSV and JSON rendering" {
