@@ -61,6 +61,16 @@ const ProgressPainter = struct {
     }
 };
 
+
+/// True when `output` resolves to the same file as the input path (symlinks and
+/// relative spellings included). A missing output or stdin input is never the same.
+fn sameFile(io: std.Io, arena: std.mem.Allocator, output: []const u8, input: []const u8) bool {
+    if (std.mem.eql(u8, input, "-") or std.mem.eql(u8, input, "@stdin")) return false;
+    const cwd = std.Io.Dir.cwd();
+    const out_real = cwd.realPathFileAlloc(io, output, arena) catch return false;
+    const in_real = cwd.realPathFileAlloc(io, input, arena) catch return false;
+    return std.mem.eql(u8, out_real, in_real);
+}
 pub fn main(init: std.process.Init) !u8 {
     const gpa = init.gpa;
     const io = init.io;
@@ -84,16 +94,21 @@ pub fn main(init: std.process.Init) !u8 {
     };
 
     var out_buf: [64 * 1024]u8 = undefined;
-    var out_file: ?std.Io.File = null;
-    defer if (out_file) |f| f.close(io);
+    // A file output is written to an unnamed temporary and renamed into place only after
+    // success, so a failed run never truncates or creates the target.
+    var atomic: ?std.Io.File.Atomic = null;
+    defer if (atomic) |*a| a.deinit(io);
     var out_writer = switch (cfg.output) {
         .file => |path| blk: {
-            const f = std.Io.Dir.cwd().createFile(io, path, .{}) catch |e| {
+            if (sameFile(io, init.arena.allocator(), path, cfg.path)) {
+                try stderr.print("dna-repeats: output {s} would overwrite the input\n", .{path});
+                return 2;
+            }
+            atomic = std.Io.Dir.cwd().createFileAtomic(io, path, .{ .replace = true }) catch |e| {
                 try stderr.print("dna-repeats: cannot create {s}: {s}\n", .{ path, @errorName(e) });
                 return 1;
             };
-            out_file = f;
-            break :blk f.writer(io, &out_buf);
+            break :blk atomic.?.file.writer(io, &out_buf);
         },
         else => std.Io.File.stdout().writer(io, &out_buf),
     };
@@ -102,6 +117,7 @@ pub fn main(init: std.process.Init) !u8 {
     if (cfg.help or cfg.about) {
         if (cfg.help) try out.writeAll(cli.usage) else try cli.writeAbout(out, build_options.version, @tagName(builtin.os.tag), @tagName(builtin.cpu.arch));
         try out.flush();
+        if (atomic) |*a| try a.replace(io);
         return 0;
     }
 
@@ -208,6 +224,10 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (cfg.json) try out.writeAll("\n]\n");
     try out.flush();
+    if (atomic) |*a| a.replace(io) catch |e| {
+        try stderr.print("dna-repeats: cannot write {s}: {s}\n", .{ cfg.output.file, @errorName(e) });
+        return 1;
+    };
     if (progress) {
         // Blank the progress line; plain spaces keep --no-color output free of ANSI.
         try stderr.writeAll("\r");

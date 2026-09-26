@@ -7,7 +7,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 
 ## Now
 
-- [ ] CRITICAL (review): -o truncates before input is read; `-o X` with input X destroys it, and failed runs leave empty outputs. Write to a temp file and rename on success; refuse output == input.
+- [x] -o is now safe: output resolving to the input (paths, symlinks) is refused with exit 2; file output goes to an unnamed temp (File.Atomic) renamed only on success, so failed runs never create or truncate the target. Hard links to the input are not detected. (done 2026-09-26 18:40 EDT)
 - [ ] CRITICAL (review): candidate scan walks the whole capture-history chain per start (O(m^2) in tandem/poly-A runs); use an existence-only pattern `(?=([ACGT]{L}).{0,G}?\1)` without capture history.
 - [ ] CRITICAL (review): default --max-len is O(n^2), computed twice, N runs inflate it past PCRE2 limits; decide default (Peter) and compute once.
 - [x] Greedy peel of seed runs (coverage index, O(log n) overlap) keeps welded neighbor arrays apart; union region and deduplicated copies on merge; unit reported from the exact seed. Dev 24/25 88.9%; held-out #1 (now contaminated) 68/71 85.0%. (done 2026-09-26 17:55 EDT)

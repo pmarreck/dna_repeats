@@ -176,5 +176,26 @@ t=crispr-min-copies-5-finds-none
 capture "$bin" --crispr --min-copies 5 "$work/array.fa"
 expect_rc $t 0 && expect_eq $t "$out" "" && pass $t
 
+t=output-refuses-to-overwrite-input
+cp "$work/sample.txt" "$work/victim.txt"
+capture "$bin" "${run[@]}" -o "$work/victim.txt" "$work/victim.txt"
+expect_rc $t 2 && expect_has $t "$err" "would overwrite the input" &&
+	expect_eq $t "$(cat "$work/victim.txt")" "$(cat "$work/sample.txt")" && pass $t
+
+t=failed-run-creates-no-output
+capture "$bin" "${run[@]}" -o "$work/never.tsv" "$work/nope.txt"
+expect_rc $t 1 && [ ! -e "$work/never.tsv" ] && pass $t || fail $t "output file created by a failed run"
+
+t=failed-run-keeps-existing-output
+echo "precious" >"$work/keep.tsv"
+capture "$bin" "${run[@]}" -o "$work/keep.tsv" "$work/bad.txt"
+expect_rc $t 1 && expect_eq $t "$(cat "$work/keep.tsv")" "precious" && pass $t
+
+t=output-refuses-symlink-to-input
+cp "$work/sample.txt" "$work/victim2.txt"
+ln -s "$work/victim2.txt" "$work/alias.tsv"
+capture "$bin" "${run[@]}" -o "$work/alias.tsv" "$work/victim2.txt"
+expect_rc $t 2 && expect_eq $t "$(cat "$work/victim2.txt")" "$(cat "$work/sample.txt")" && pass $t
+
 printf '%d passed, %d failed\n' "$passes" "$fails"
 exit "$fails"
