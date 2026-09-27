@@ -34,14 +34,14 @@ check truthless-predictions-count "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions
 
 # bench/shuffle-fasta: per-record permutation (same length and base counts), deterministic by seed.
 fa=$'>r1 desc\nACGTACGTAAAACCCG\nTTTT\n>r2\nGGGGCCCCAATT\n'
-one=$(printf '%s' "$fa" | bench/shuffle-fasta 7)
-two=$(printf '%s' "$fa" | bench/shuffle-fasta 7)
-other=$(printf '%s' "$fa" | bench/shuffle-fasta 8)
+one=$(printf '%s' "$fa" | bash bench/shuffle-fasta 7)
+two=$(printf '%s' "$fa" | bash bench/shuffle-fasta 7)
+other=$(printf '%s' "$fa" | bash bench/shuffle-fasta 8)
 counts() { awk '/^>/ {name=$1; next} {s[name] = s[name] $0} END {for (n in s) {c = s[n]; printf "%s %d A%d C%d G%d T%d\n", n, length(c), gsub(/A/,"",c), gsub(/C/,"",c), gsub(/G/,"",c), gsub(/T/,"",c)}}' | sort; }
 check shuffle-permutes "$(printf '%s\n' "$one" | counts)" "$(printf '%s' "$fa" | counts)"
 check shuffle-deterministic "$one" "$two"
 [ "$one" != "$other" ] && check shuffle-seed-matters ok ok || check shuffle-seed-matters same different
-[ "$(printf '%s\n' "$one" | rg -v '^>' | tr -d '\n')" != "$(printf '%s' "$fa" | rg -v '^>' | tr -d '\n')" ] && check shuffle-changes-order ok ok || check shuffle-changes-order unchanged changed
+[ "$(printf '%s\n' "$one" | grep -v '^>' | tr -d '\n')" != "$(printf '%s' "$fa" | grep -v '^>' | tr -d '\n')" ] && check shuffle-changes-order ok ok || check shuffle-changes-order unchanged changed
 
 # No truth and no predictions (a clean negative control) still yields numeric totals.
 got=$(${AWK:-awk} -f bench/score.awk /dev/null /dev/null | tail -1)
