@@ -10,12 +10,14 @@ pub const Params = struct {
     /// Spacer (bases between consecutive copies) bounds.
     min_spacer: usize = 20,
     max_spacer: usize = 72,
-    /// Most similar spacer pair allowed (positional identity); REP elements, tRNA
-    /// clusters and coding repeats reuse near-identical "spacers".
+    /// Largest share of spacer pairs allowed to share a 10-mer: repeat elements and coding
+    /// repeats reuse their "spacers", while a real array may carry one duplicated spacer.
+    /// Most similar spacer pair allowed (positional identity) and the largest share of
+    /// pairs allowed above it, judged on the seed unit's spacers before consensus
+    /// extension (which would grow a unit into similar "spacers" and hide them).
     max_spacer_identity: f64 = 0.6,
-    /// Largest share of spacer pairs allowed above max_spacer_identity: repeat elements
-    /// reuse all their "spacers", while a real array may carry one duplicated spacer.
     max_similar_spacer_fraction: f64 = 0.2,
+    max_shared_spacer_fraction: f64 = 0.2,
     /// Longest unit searched: a repeat still extendable at this length is too long for CRISPR.
     max_unit: usize = std.math.maxInt(usize),
     /// Mismatches allowed per extended copy, as a fraction of the unit (0.15: 4 of 29).
@@ -24,6 +26,8 @@ pub const Params = struct {
     /// shifted by 1..len/2): CRISPR repeats are not internally periodic, while
     /// low-complexity coding repeats (e.g. PE_PGRS, period 9) are.
     max_unit_self_similarity: f64 = 0.7,
+    /// Lowest mean identity of the copies to the unit (PILER-CR's -mincons default).
+    min_repeat_conservation: f64 = 0.9,
 };
 
 /// One called array: [start, end) in the record, 0-based.
@@ -119,14 +123,32 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
             if (c.copies.len > best.copies.len or (c.copies.len == best.copies.len and c.len > best.len)) best = c;
         }
         const copies = positions.items.len;
-        if (copies >= params.min_copies and
-            similarSpacerFraction(subject, best.copies, best.len, params.max_spacer_identity) <= params.max_similar_spacer_fraction and
-            selfSimilarity(subject[best.seed..][0..best.len]) <= params.max_unit_self_similarity and
-            !(best.len >= params.max_unit and extendable(subject, best.copies, best.len)))
-        {
+        // Judge seed spacers before consensus extension can swallow similar ones.
+        const similar = similarSpacerFraction(subject, best.copies, best.len, params.max_spacer_identity);
+        // Conservation too is judged on the seed unit: extension adds bases up to 20% of copies
+        // disagree on, which would lower it for real arrays.
+        const conserved = conservation(subject, best.copies, subject[best.seed..][0..best.len]);
+        // Grow the unit to the bases most copies share, so spacers exclude repeat bases.
+        const ext = consensusExtension(subject, best.copies, best.len);
+        const unit_pos = best.seed - ext.left;
+        const unit_len = best.len + ext.left + ext.right;
+        const unit = subject[unit_pos..][0..unit_len];
+        for (best.copies) |*p| p.* -= ext.left;
+        const judged = copies >= params.min_copies and
+            similar <= params.max_similar_spacer_fraction and
+            try sharedKmerSpacerFraction(gpa, subject, best.copies, unit_len) <= params.max_shared_spacer_fraction and
+            selfSimilarity(unit) <= params.max_unit_self_similarity and
+            conserved >= params.min_repeat_conservation and
+            // Too long for CRISPR: consensus grew the unit well past the search cap (known
+            // repeats reach ~50 bases, so allow a small margin), or the seed is exactly
+            // extendable at the cap.
+            unit_len <= params.max_unit +| consensus_margin and
+            !(best.len >= params.max_unit and unit_len == best.len and extendable(subject, best.copies, unit_len));
+        if (judged) {
             const owned = try gpa.dupe(usize, positions.items);
             errdefer gpa.free(owned);
-            try out.append(gpa, .{ .start = cands.items[i].start, .end = end, .copies = copies, .unit_len = best.len, .unit_pos = best.seed, .positions = owned });
+            for (owned) |*p| p.* -|= ext.left;
+            try out.append(gpa, .{ .start = cands.items[i].start -| ext.left, .end = end + ext.right, .copies = copies, .unit_len = unit_len, .unit_pos = unit_pos, .positions = owned });
         }
         i = j;
     }
@@ -266,6 +288,108 @@ fn similarSpacerFraction(subject: []const u8, copies: []const usize, len: usize,
     }
     return if (pairs == 0) 0 else @as(f64, @floatFromInt(similar)) / @as(f64, @floatFromInt(pairs));
 }
+/// Bases the unit can grow by on each side: while at least `consensus_agreement` of
+/// the copies share the next base, keeping every spacer at least `min_residual_spacer`
+/// long and inside the subject. Recovers a repeat's true boundaries when the exact
+/// seed was shorter (degraded or truncated ends).
+fn consensusExtension(subject: []const u8, copies: []const usize, len: usize) struct { left: usize, right: usize } {
+    var min_gap: usize = std.math.maxInt(usize);
+    for (copies[0 .. copies.len - 1], copies[1..]) |a, b| min_gap = @min(min_gap, b - a - len);
+    const room = min_gap -| min_residual_spacer;
+    var left: usize = 0;
+    var right: usize = 0;
+    while (left + right < room and copies[0] > left and agreeAt(subject, copies, -@as(isize, @intCast(left)) - 1)) left += 1;
+    while (left + right < room and copies[copies.len - 1] + len + right < subject.len and agreeAt(subject, copies, @intCast(len + right))) right += 1;
+    return .{ .left = left, .right = right };
+}
+
+const consensus_agreement = 0.8;
+const min_residual_spacer = 8;
+/// Bases consensus may add beyond the search cap before a repeat counts as too long.
+const consensus_margin = 8;
+
+/// Whether at least `consensus_agreement` of the copies share their base at `offset`
+/// from each copy start (majority vote over A/C/G/T).
+fn agreeAt(subject: []const u8, copies: []const usize, offset: isize) bool {
+    var counts = [_]usize{0} ** 4;
+    for (copies) |p| {
+        const at: usize = @intCast(@as(isize, @intCast(p)) + offset);
+        switch (subject[at]) {
+            'A' => counts[0] += 1,
+            'C' => counts[1] += 1,
+            'G' => counts[2] += 1,
+            'T' => counts[3] += 1,
+            else => {},
+        }
+    }
+    const top = @max(@max(counts[0], counts[1]), @max(counts[2], counts[3]));
+    return @as(f64, @floatFromInt(top)) >= consensus_agreement * @as(f64, @floatFromInt(copies.len));
+}
+
+const spacer_kmer = 10;
+
+/// Share of spacer pairs with at least one 10-mer in common. Real spacers come from
+/// unrelated foreign DNA and almost never share one; the "spacers" between copies of a
+/// coding or interspersed repeat reuse the same motifs, often at shifted offsets that a
+/// positional comparison misses. Each spacer's 10-mers are 2-bit packed into a sorted
+/// u32 list; a pair is compared by a linear merge.
+/// complexity: O(k^2 * s + k * s log s) for k copies and spacers of length s.
+fn sharedKmerSpacerFraction(gpa: Allocator, subject: []const u8, copies: []const usize, len: usize) Allocator.Error!f64 {
+    const n = copies.len - 1;
+    var bounds = try gpa.alloc([2]usize, n);
+    defer gpa.free(bounds);
+    var codes: std.ArrayList(u32) = .empty;
+    defer codes.deinit(gpa);
+    for (0..n) |i| {
+        const spacer = subject[copies[i] + len .. copies[i + 1]];
+        const from = codes.items.len;
+        var code: u32 = 0;
+        var valid: usize = 0; // bases since the last non-ACGT byte
+        for (spacer) |b| {
+            const v: u32 = switch (b) {
+                'A' => 0,
+                'C' => 1,
+                'G' => 2,
+                'T' => 3,
+                else => {
+                    valid = 0;
+                    continue;
+                },
+            };
+            code = ((code << 2) | v) & ((1 << (2 * spacer_kmer)) - 1);
+            valid += 1;
+            if (valid >= spacer_kmer) try codes.append(gpa, code);
+        }
+        std.mem.sort(u32, codes.items[from..], {}, std.sort.asc(u32));
+        bounds[i] = .{ from, codes.items.len };
+    }
+    if (n < 2) return 0;
+    var shared: usize = 0;
+    for (0..n) |i| {
+        for (i + 1..n) |j| {
+            const a = codes.items[bounds[i][0]..bounds[i][1]];
+            const b = codes.items[bounds[j][0]..bounds[j][1]];
+            var x: usize = 0;
+            var y: usize = 0;
+            while (x < a.len and y < b.len) {
+                if (a[x] == b[y]) {
+                    shared += 1;
+                    break;
+                }
+                if (a[x] < b[y]) x += 1 else y += 1;
+            }
+        }
+    }
+    return @as(f64, @floatFromInt(shared)) / @as(f64, @floatFromInt(n * (n - 1) / 2));
+}
+
+
+/// Mean fraction of each copy's bases equal to the unit (1.0 when every copy is exact).
+fn conservation(subject: []const u8, copies: []const usize, unit: []const u8) f64 {
+    var mismatches: usize = 0;
+    for (copies) |p| mismatches += hamming(subject[p..][0..unit.len], unit);
+    return 1.0 - @as(f64, @floatFromInt(mismatches)) / @as(f64, @floatFromInt(copies.len * unit.len));
+}
 
 /// Best fraction of positions where the unit equals itself shifted by p, over p in 1..len/2.
 fn selfSimilarity(unit: []const u8) f64 {
@@ -385,7 +509,7 @@ fn put(buf: []u8, at: usize, bases: []const u8) usize {
     return at + bases.len;
 }
 
-test "near-identical spacers (over max_spacer_identity) are not an array" {
+test "near-identical spacers (sharing 10-mers) are not an array" {
     var buf: [400]u8 = undefined;
     fillRandom(&buf, 21);
     var spacer: [30]u8 = undefined;
@@ -557,4 +681,69 @@ test "coverage: half-open overlap at every boundary, and merging spans" {
     try testing.expectEqual([2]usize{ 10, 50 }, c.spans.items[0]);
     try c.add(testing.allocator, 50, 55); // touching, not overlapping: stays separate
     try testing.expectEqual(@as(usize, 2), c.spans.items.len);
+}
+
+test "copies conserving under min_repeat_conservation of the unit on average are not an array" {
+    var buf: [900]u8 = undefined;
+    fillRandom(&buf, 101);
+    var at: usize = 30;
+    for (0..12) |k| {
+        // Each degraded copy differs from the unit at 3 of 23 bases (within the per-copy
+        // extension budget), at different positions, so they are not an exact family themselves.
+        var bad: [dr.len]u8 = dr.*;
+        for (0..3) |m| {
+            const i = (k * 5 + m * 8) % dr.len;
+            bad[i] = if (bad[i] == 'A') 'C' else 'A';
+        }
+        at = put(&buf, at, if (k < 2) dr else &bad);
+        var s: [30]u8 = undefined;
+        fillRandom(&s, 110 + k);
+        if (k < 11) at = put(&buf, at, &s);
+    }
+    // Mean identity (2 * 1.0 + 10 * 20/23) / 12 = 0.891 < 0.9.
+    const arrays = try callOn(&buf, .{});
+    defer freeArrays(testing.allocator, arrays);
+    try testing.expectEqual(@as(usize, 0), arrays.len);
+}
+
+test "the unit is extended by consensus to bases most copies share" {
+    var buf: [700]u8 = undefined;
+    fillRandom(&buf, 121);
+    var core: [26]u8 = undefined;
+    fillRandom(&core, 122);
+    const flank = "GT"; // 4 of 5 copies continue with these 2 bases
+    var at: usize = 40;
+    var starts: [5]usize = undefined;
+    for (0..5) |k| {
+        starts[k] = at;
+        at = put(&buf, at, &core);
+        if (k != 2) at = put(&buf, at, flank) else at = put(&buf, at, "CA");
+        var s: [30]u8 = undefined;
+        fillRandom(&s, 130 + k);
+        if (k < 4) at = put(&buf, at, &s);
+    }
+    const arrays = try callOn(&buf, .{});
+    defer freeArrays(testing.allocator, arrays);
+    try testing.expectEqual(@as(usize, 1), arrays.len);
+    try testing.expectEqual(@as(usize, 28), arrays[0].unit_len);
+    try testing.expectEqualSlices(usize, &starts, arrays[0].positions);
+}
+
+test "spacers sharing 10-mers (a coding motif at shifting offsets) are not an array" {
+    var buf: [700]u8 = undefined;
+    fillRandom(&buf, 141);
+    var motif: [15]u8 = undefined;
+    fillRandom(&motif, 142);
+    var at: usize = 40;
+    for (0..5) |k| {
+        at = put(&buf, at, dr);
+        if (k == 4) break;
+        var s: [36]u8 = undefined;
+        fillRandom(&s, 150 + k);
+        @memcpy(s[3 + k * 4 ..][0..motif.len], &motif); // same motif, shifted 4 bases each time
+        at = put(&buf, at, &s);
+    }
+    const arrays = try callOn(&buf, .{});
+    defer freeArrays(testing.allocator, arrays);
+    try testing.expectEqual(@as(usize, 0), arrays.len);
 }

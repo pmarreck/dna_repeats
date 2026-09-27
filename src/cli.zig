@@ -16,7 +16,7 @@ pub const usage =
     \\  --arrays             report arrays (merged families, distinct spacers) not families
     \\  --min-copies N       fewest copies in an array (default 3)
     \\  --min-spacer N       fewest bases between array copies (default 0)
-    \\  --crispr             CRISPR preset: --arrays, lengths 23..47, spacers 20..72
+    \\  --crispr             CRISPR preset: --arrays, lengths 23..47, spacers 26..64
     \\  -j, --threads N      worker threads (default: one per CPU)
     \\  -o, --output PATH    write results to PATH ('-' or @stdout: stdout; @stderr: stderr)
     \\  --progress           always show progress on stderr
@@ -113,12 +113,13 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
         } else if (eql(a, "--arrays")) {
             cfg.arrays = true;
         } else if (eql(a, "--crispr")) {
-            // CRISPR preset: repeat and spacer bounds close to MinCED's, array output.
+            // CRISPR preset: repeats 23..47 and spacers 26..64, the published defaults of
+            // MinCED (repeats, min spacer) and PILER-CR (max spacer); array output.
             cfg.arrays = true;
             cfg.min_len = 23;
             cfg.max_len = 47;
-            cfg.min_spacer = 20;
-            cfg.max_gap = 72;
+            cfg.min_spacer = 26; // MinCED's default
+            cfg.max_gap = 64; // PILER-CR's default
         } else if (eql(a, "--min-copies") or eql(a, "--min-spacer")) {
             i += 1;
             if (i >= args.len) return error.MissingValue;
@@ -348,8 +349,8 @@ test "--arrays, --crispr preset, and array tuning; later wins" {
     try testing.expect(c.arrays);
     try testing.expectEqual(@as(usize, 23), c.min_len);
     try testing.expectEqual(@as(usize, 47), c.max_len);
-    try testing.expectEqual(@as(usize, 20), c.min_spacer);
-    try testing.expectEqual(@as(usize, 72), c.max_gap);
+    try testing.expectEqual(@as(usize, 26), c.min_spacer);
+    try testing.expectEqual(@as(usize, 64), c.max_gap);
     // Options after the preset override it; options before it are overridden.
     const o = try parseArgs(&.{ "x", "--min-len", "30", "--crispr", "--max-gap", "90", "--min-copies", "2", "--min-spacer", "15" });
     try testing.expectEqual(@as(usize, 23), o.min_len);

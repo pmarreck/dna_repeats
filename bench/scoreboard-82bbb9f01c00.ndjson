@@ -14,3 +14,11 @@
 {"commit":"ccae987","when":"2026-09-26T15:07:24-04:00","machine":"82bbb9f01c00","set":"heldout","tool":"dnarepeats","el4":71,"recalled":66,"predictions":76,"correct":66,"wall_s":2.75,"peak_kb":47140}
 {"commit":"c0a468f","when":"2026-09-26T18:02:03-04:00","machine":"82bbb9f01c00","set":"dev","tool":"dnarepeats","el4":25,"recalled":24,"predictions":27,"correct":24,"wall_s":0.75,"peak_kb":47136}
 {"commit":"c0a468f","when":"2026-09-26T18:03:15-04:00","machine":"82bbb9f01c00","set":"heldout","tool":"dnarepeats","el4":71,"recalled":68,"predictions":80,"correct":68,"wall_s":3.18,"peak_kb":47136}
+{"commit":"5e80b78","when":"2026-09-26T20:13:09-04:00","machine":"82bbb9f01c00","set":"dev","tool":"dnarepeats","el4":25,"recalled":24,"predictions":25,"correct":24,"wall_s":0.54,"peak_kb":14368}
+{"commit":"5e80b78","when":"2026-09-26T20:14:20-04:00","machine":"82bbb9f01c00","set":"heldout","tool":"dnarepeats","el4":71,"recalled":68,"predictions":80,"correct":68,"wall_s":2.16,"peak_kb":14368}
+{"commit":"5e80b78","when":"2026-09-26T20:33:28-04:00","machine":"82bbb9f01c00","set":"dev","tool":"dnarepeats","el4":25,"recalled":24,"predictions":33,"correct":24,"wall_s":0.54,"peak_kb":14368}
+{"commit":"5e80b78","when":"2026-09-26T20:34:59-04:00","machine":"82bbb9f01c00","set":"heldout","tool":"dnarepeats","el4":71,"recalled":65,"predictions":69,"correct":65,"wall_s":2.2,"peak_kb":14368}
+{"commit":"5e80b78","when":"2026-09-26T20:39:25-04:00","machine":"82bbb9f01c00","set":"dev","tool":"dnarepeats","el4":25,"recalled":24,"predictions":25,"correct":24,"wall_s":0.58,"peak_kb":14368}
+{"commit":"5e80b78","when":"2026-09-26T20:40:46-04:00","machine":"82bbb9f01c00","set":"heldout","tool":"dnarepeats","el4":71,"recalled":65,"predictions":67,"correct":65,"wall_s":2.27,"peak_kb":14368}
+{"commit":"5e80b78","when":"2026-09-26T20:47:01-04:00","machine":"82bbb9f01c00","set":"dev","tool":"dnarepeats","el4":25,"recalled":24,"predictions":25,"correct":24,"wall_s":0.58,"peak_kb":14368}
+{"commit":"5e80b78","when":"2026-09-26T20:48:14-04:00","machine":"82bbb9f01c00","set":"heldout","tool":"dnarepeats","el4":71,"recalled":68,"predictions":70,"correct":68,"wall_s":2.25,"peak_kb":14368}
