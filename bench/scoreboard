@@ -2,7 +2,7 @@
 # CRISPR scoreboard (intents/beat_existing_tools.md): every tool on every pinned genome,
 # wall time and peak memory from GNU time, recall/precision from bench/score.awk against
 # CRISPRCasdb, appended to bench/scoreboard-<machine-id>.ndjson.
-# usage: bench/scoreboard [--set dev|heldout|heldout2|shuffled] [TOOL...]   (default: dev set, every tool below)
+# usage: bench/scoreboard [--set dev|heldout|heldout2|heldout3|shuffled] [TOOL...]   (default: dev set, every tool below)
 #        bench/scoreboard --genomes DIR --truth FILE --label NAME [TOOL...]   (ad-hoc set)
 #   dev: the genomes filters are tuned on; heldout: the fixed held-out set used for claims.
 #   shuffled: dev genomes with shuffled bases (negative control: every prediction is false).
@@ -27,6 +27,7 @@ else case $set in
 	dev) genomes=$(build genomes) && truth=$(build crisprTruth) || exit 1 ;;
 	heldout) genomes=$(build heldoutGenomes) && truth=$(build heldoutTruth) || exit 1 ;;
 	heldout2) genomes=$(build heldout2Genomes) && truth=$(build heldout2Truth) || exit 1 ;;
+	heldout3) genomes=$(build heldout3Genomes) && truth=$(build heldout3Truth) || exit 1 ;;
 	shuffled) genomes=$(build shuffledGenomes) && truth=$(build emptyTruth) || exit 1 ;;
 	*) echo "unknown set: $set" >&2; exit 2 ;;
 esac

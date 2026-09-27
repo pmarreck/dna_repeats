@@ -82,6 +82,40 @@ let
 		"CP001363.1" = "sha256-tCy4WAAXaA33EBrUa52H3xlDoi6Pyb/wcETVm5w+grc=";
 
 	};
+	# Held-out set #3: positions 61-90 by the same rule, pinned 2026-09-26 23:20 EDT before any
+	# result on it was seen, after held-out #2 had been scored once and the seeding changed.
+	heldout3Hashes = {
+		"CP037831.1" = "sha256-S8KjIfkerfvBTsiWpTbDDnxlShxI8T2kVQBp0Cr1PCg=";
+		"CP031703.1" = "sha256-jX3cZdHO0Nky6R/D0QL+N5Xlwna0DBwuCIPm/4aeh8Y=";
+		"OU015584.1" = "sha256-LrfQkdMgsh3J7LeUbaAzUGAQjZOJkn5i2qtgN26gyIc=";
+		"CP027717.1" = "sha256-UB3RR6wpOeSDRuYvjFenHtv4fV/Q7NYOJAw2xQ+HPPk=";
+		"CP045694.1" = "sha256-uw3gI4cGsRRbok24OfDUNrkS6Ac2idem2um0tdw98nA=";
+		"CP076098.1" = "sha256-XoV8B6LBiki4Od7xFtXh/tzdIbphOcRMAXuqmYiCpn0=";
+		"CP021202.1" = "sha256-ePlTWpmJJgD5MFhknfw7coomCML1fV9FF7j+4INuvw4=";
+		"LR698974.1" = "sha256-wHd3iqLwqIrQqWOBCkW8JSW2xkGvZvga0w2jcmQu4U0=";
+		"CP088443.1" = "sha256-o/73n2XdyKhQWuIQ4WNbZOlBBFa61VjiGHknWENS96c=";
+		"CP007011.1" = "sha256-gKGj0vkOEjCpg7f6HAlmXWXHHCwlcjwX1qG+EccUqr8=";
+		"CP002038.1" = "sha256-Rm8BdlslUqlPMoo8zadfbxThCt2r1w+0DeCf5/MAKuk=";
+		"CP070954.1" = "sha256-LlRmjx+jx5C6IRfMcI3fesdGW3yR4JZ5S5ioK4Faaww=";
+		"CP070897.1" = "sha256-wxKl/UBAgPDW9eejbBk+Zw7/vtAcZXMRrqX3lR/VkL8=";
+		"OU917922.1" = "sha256-ya9f7JdHcI12peIdCjgNmNN4uGNNrpHjumFYPUdx2nc=";
+		"CP084332.1" = "sha256-uw5+xSXNryQfr/Rpz0+e2dcMa7J1gZYCrja7lhpPbZ8=";
+		"AP014724.1" = "sha256-Ujh2uQLnMBgfZLXyobyT9bEwGLtiOt0pHLg20K+aPbQ=";
+		"CP033336.1" = "sha256-Fbpfn+k9hxhROhyFLXIwkP0D71geixcCbcusJw40xbg=";
+		"CP017518.1" = "sha256-Mh/Ezh1mzknK5tEBjPILUYjIFvUgU80r58UQsDAzk0M=";
+		"AP025205.2" = "sha256-9l8zwZM1PwnpfGbDuENe29IOs06tn3m91UyfLIHxJCE=";
+		"CP050447.1" = "sha256-KZXjDaqihkfnwdOG1FswnXyZ5o8QXk55uTmnZ/jB6ac=";
+		"CP085753.1" = "sha256-/ztr1EQuxDCFWJr5oQ90Ueb9egPsOyYZApwxuT6b7k8=";
+		"CP007776.2" = "sha256-Z9I+5fv745O/qFfh9S/9YOcoITBHs2WLv/V53wEqsBc=";
+		"CP070376.1" = "sha256-ZZq3vt1pPM+jfcdnBN020D9+KKsQtufXyJxQ24wnJ/k=";
+		"AE017222.1" = "sha256-qoKC/dgQCY+WKgflwH5OEXQBM1cuu0OJNKwZm0U2YV0=";
+		"CP048835.1" = "sha256-5+gPeNsEgI/S2pOFk/qTLbaZPbuH3+OFNPddrM9Ei7w=";
+		"CP003119.1" = "sha256-L4l8L+F3crb7baRdThR7ix9/2X/ckHBU4uGZGjKfk/4=";
+		"CP073630.1" = "sha256-Y4FqPmgef6v5KxOjCEwJAU55PoyhCHlmU0Sv+s2oQRU=";
+		"CP071133.1" = "sha256-M/ielr/DiE9ZtBS6XYJkYB7AYVCantEyF6d/E7iR4AU=";
+		"CP006716.1" = "sha256-7gE/Qw6hnZ1psyDHdvY/MSUFIrZUwnRTbn4+iDZebAw=";
+		"CP047529.1" = "sha256-64OLCRE6kt5axMd5S5pD7tJHJviUOsvfjNyfSVY5X+M=";
+	};
 	fetchGenome = acc: hash: pkgs.fetchurl {
 		name = "${acc}.fa";
 		url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=${acc}&rettype=fasta&retmode=text";
@@ -121,6 +155,8 @@ in {
 	heldoutTruth = mkTruth "crisprcasdb-heldout-truth.tsv" heldoutHashes;
 	heldout2Genomes = genomeFarm "scoreboard-heldout2-genomes" heldout2Hashes;
 	heldout2Truth = mkTruth "crisprcasdb-heldout2-truth.tsv" heldout2Hashes;
+	heldout3Genomes = genomeFarm "scoreboard-heldout3-genomes" heldout3Hashes;
+	heldout3Truth = mkTruth "crisprcasdb-heldout3-truth.tsv" heldout3Hashes;
 	# Negative control: the dev genomes with each record's bases shuffled (seed 1), so no real
 	# repeat survives; every array a tool reports on them is a false positive.
 	shuffledGenomes = pkgs.runCommand "scoreboard-shuffled-genomes" { nativeBuildInputs = [ pkgs.gawk pkgs.bash ]; } ''

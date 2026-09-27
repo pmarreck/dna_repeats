@@ -68,6 +68,11 @@ a fresh held-out set by the same rule (next 30), and saying so in the report.
 Held-out #1 was used on 2026-09-26 to diagnose the welded-arrays bug, so it is now
 development data. Held-out #2 (positions 31-60; 30 genomes, 70 evidence-level-4 arrays)
 was pinned in nix/benchdata.nix before any result on it was seen.
+Held-out #2 was scored once (code frozen at 4226a2f); the seeding then changed (shorter
+seeds, consensus re-extension), which was tuned on dev, held-out #1 and synthetic
+divergence sets only. Held-out #3 (positions 61-90; 30 genomes, 73 evidence-level-4
+arrays) was pinned on 2026-09-26 23:20 EDT, before any result on it was seen, and is
+scored once with the code frozen at the commit that pins it.
 
 ## Open questions
 
