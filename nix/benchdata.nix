@@ -121,4 +121,13 @@ in {
 	heldoutTruth = mkTruth "crisprcasdb-heldout-truth.tsv" heldoutHashes;
 	heldout2Genomes = genomeFarm "scoreboard-heldout2-genomes" heldout2Hashes;
 	heldout2Truth = mkTruth "crisprcasdb-heldout2-truth.tsv" heldout2Hashes;
+	# Negative control: the dev genomes with each record's bases shuffled (seed 1), so no real
+	# repeat survives; every array a tool reports on them is a false positive.
+	shuffledGenomes = pkgs.runCommand "scoreboard-shuffled-genomes" { nativeBuildInputs = [ pkgs.gawk pkgs.bash ]; } ''
+		mkdir -p $out
+		for f in ${genomeFarm "scoreboard-genomes" devHashes}/*.fa; do
+			bash ${../bench/shuffle-fasta} 1 < "$f" > "$out/$(basename "$f")"
+		done
+	'';
+	emptyTruth = pkgs.writeText "empty-truth.tsv" "";
 }

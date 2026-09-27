@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Negative-control input: shuffle each FASTA record's bases (mononucleotide Fisher-Yates),
+# keeping headers, lengths and base composition while destroying every real repeat.
+# usage: bench/shuffle-fasta SEED < in.fa > out.fa   (deterministic for a seed; integer LCG)
+set -u
+seed=${1:?usage: shuffle-fasta SEED < in.fa}
+awk -v seed="$seed" '
+function flush(   n, i, j, t, line) {
+	if (header == "") return
+	print header
+	n = split(seq, b, "")
+	for (i = n; i > 1; i--) {
+		s = (s * 16807) % 2147483647
+		j = 1 + s % i
+		t = b[i]; b[i] = b[j]; b[j] = t
+	}
+	line = ""
+	for (i = 1; i <= n; i++) { line = line b[i]; if (length(line) == 60) { print line; line = "" } }
+	if (line != "") print line
+}
+BEGIN { s = seed % 2147483647; if (s <= 0) s += 2147483646; header = ""; seq = "" }
+/^>/ { flush(); header = $0; seq = ""; next }
+{ gsub(/[ \t\r]/, ""); seq = seq $0 }
+END { flush() }'

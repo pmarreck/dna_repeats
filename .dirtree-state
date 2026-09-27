@@ -9,6 +9,7 @@ annotate=[
 	bench/gen-corpus = Deterministic synthetic DNA generator (integer LCG in awk) for benchmarks; stats tuned near the private sample
 	bench/score.awk = Scoreboard scorer: union-coverage recall over EL4 arrays, precision over any-level arrays
 	bench/scoreboard = CRISPR scoreboard: opponents and dna-repeats on pinned genomes, time/memory, recall/precision, ndjson log
+	bench/shuffle-fasta = Negative-control input: per-record mononucleotide Fisher-Yates shuffle of FASTA, deterministic by seed
 	bm = Benchmarks: ReleaseFast package on synthetic DNA; linear-scaling gate plus two-sided per-machine ndjson log
 	build = Builds the ReleaseFast package through Nix
 	build.zig = Zig build graph: oracle, normalizer, finder, CLI and differential tests against the pinned pcre2 fork

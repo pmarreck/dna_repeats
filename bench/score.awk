@@ -7,13 +7,14 @@
 # (any evidence level, so finding a lower-evidence candidate is not penalized).
 # Output: one line per truth accession (sorted), then TOTAL.
 BEGIN { FS = OFS = "\t"; MIN_FRACTION = 0.5 }
-FNR == NR {
+FILENAME == ARGV[1] { # not FNR == NR: an empty truth file would make predictions read as truth
 	n = ++nt[$1]; ts[$1, n] = $3; te[$1, n] = $3 + $4 - 1; tel[$1, n] = $6
 	accs[$1] = 1
 	next
 }
 {
 	n = ++np[$1]; ps[$1, n] = $2; pe[$1, n] = $3
+	accs[$1] = 1 # a prediction on a sequence without truth still counts (as wrong)
 }
 function overlap(a1, a2, b1, b2) { return (a2 < b1 || b2 < a1) ? 0 : (a2 < b2 ? a2 : b2) - (a1 > b1 ? a1 : b1) + 1 }
 END {
@@ -42,5 +43,5 @@ END {
 		print acc, "el4=" el4, "recalled=" recalled, "predictions=" (np[acc] + 0), "correct=" correct
 		T_el4 += el4; T_rec += recalled; T_pred += np[acc]; T_cor += correct
 	}
-	print "TOTAL", "el4=" T_el4, "recalled=" T_rec, "predictions=" (T_pred + 0), "correct=" T_cor
+	print "TOTAL", "el4=" (T_el4 + 0), "recalled=" (T_rec + 0), "predictions=" (T_pred + 0), "correct=" (T_cor + 0)
 }
