@@ -18,6 +18,9 @@ pub const Params = struct {
     max_spacer_identity: f64 = 0.6,
     max_similar_spacer_fraction: f64 = 0.2,
     max_shared_spacer_fraction: f64 = 0.2,
+    /// Shortest final unit (after consensus extension): lets a short exact seed find a
+    /// degraded array while rejecting short-period repeats that never grow to CRISPR size.
+    min_unit: usize = 0,
     /// Longest unit searched: a repeat still extendable at this length is too long for CRISPR.
     max_unit: usize = std.math.maxInt(usize),
     /// Mismatches allowed per extended copy, as a fraction of the unit (0.15: 4 of 29).
@@ -77,7 +80,7 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
     // accepted array is one of its nested lengths or a chance fragment and is skipped;
     // otherwise it is extended outward through degraded copies and accepted. Unlike
     // grouping by overlap, neighboring arrays welded by chance runs each keep their seed.
-    std.mem.sort(Run, runs.items, {}, Run.moreCopiesFirst);
+    std.mem.sort(Run, runs.items, params.min_unit, Run.peelOrder);
     var cands: std.ArrayList(Cand) = .empty;
     defer {
         for (cands.items) |c| c.deinit(gpa);
@@ -123,7 +126,9 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
         }
         const copies = positions.items.len;
         const unit_len = best.len;
-        const judged = copies >= params.min_copies and
+        // A seed shorter than min_unit is weaker evidence (short chance repeats are common),
+        // so such an array needs one copy more.
+        const judged = copies >= params.min_copies + @intFromBool(best.core_len < params.min_unit) and
             // Judged on the seed columns' spacers: consensus extension can grow a unit into
             // similar "spacers" and hide them.
             similarSpacerFraction(subject, best.copies, best.core_off, best.core_len, params.max_spacer_identity) <= params.max_similar_spacer_fraction and
@@ -133,6 +138,7 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
             // Too long for CRISPR: consensus grew the unit well past the search cap (known
             // repeats reach ~50 bases, so allow a small margin), or the seed is exactly
             // extendable at the cap.
+            unit_len >= params.min_unit and
             unit_len <= params.max_unit +| consensus_margin and
             !(best.core_len >= params.max_unit and unit_len == best.core_len and extendable(subject, best.copies, unit_len));
         if (judged) {
@@ -152,7 +158,13 @@ const Run = struct {
     len: usize,
     copies: []const usize,
 
-    fn moreCopiesFirst(_: void, a: Run, b: Run) bool {
+    /// Seeds at least `min_unit` long first (a seed as long as a whole repeat outranks a
+    /// shorter substring, which may be shared by neighboring arrays with related repeats),
+    /// then most copies, then longest. Shorter seeds (for degraded arrays) go longest first:
+    /// a longer one is more specific than a shorter one with more (possibly chance) copies.
+    fn peelOrder(min_unit: usize, a: Run, b: Run) bool {
+        if ((a.len >= min_unit) != (b.len >= min_unit)) return a.len >= min_unit;
+        if (a.len < min_unit and a.len != b.len) return a.len > b.len;
         if (a.copies.len != b.copies.len) return a.copies.len > b.copies.len;
         if (a.len != b.len) return a.len > b.len;
         return a.start < b.start;
@@ -883,4 +895,87 @@ test "consensus extension continues past one weakly agreeing column when strong 
     try testing.expectEqual(@as(usize, 1), arrays.len);
     try testing.expectEqual(@as(usize, 34), arrays[0].unit_len);
     try testing.expectEqualSlices(usize, &starts, arrays[0].positions);
+}
+
+test "min_unit: an array is kept exactly when its final unit is at least min_unit" {
+    var buf: [400]u8 = undefined;
+    const subject = plant(&buf, 11, &.{ 50, 103, 158, 210 });
+    // Distinct bases on both sides of every copy: no family longer than dr exists, so the
+    // unit is dr whatever the seed order.
+    for (&[_]usize{ 50, 103, 158, 210 }, 0..) |p, k| {
+        subject[p - 1] = "ACGT"[k];
+        subject[p + dr.len] = "ACGT"[k];
+    }
+    const base = try callOn(subject, .{});
+    defer freeArrays(testing.allocator, base);
+    try testing.expectEqual(@as(usize, 1), base.len);
+    const unit_len = base[0].unit_len;
+    try testing.expectEqual(dr.len, unit_len);
+    for (0..unit_len + 5) |m| {
+        const arrays = try callOn(subject, .{ .min_unit = m });
+        defer freeArrays(testing.allocator, arrays);
+        try testing.expectEqual(@as(usize, @intFromBool(m <= unit_len)), arrays.len);
+    }
+}
+
+test "seeds of at least min_unit peel before shorter seeds with more copies" {
+    var buf: [900]u8 = undefined;
+    fillRandom(&buf, 201);
+    var a: [28]u8 = undefined;
+    fillRandom(&a, 202);
+    var b = a;
+    fillRandom(b[20..], 203); // shares a's first 20 bases only
+    var at: usize = 40;
+    var starts: [8]usize = undefined;
+    // Two adjacent arrays: a 20-mer run spans all 8 copies, each unit's own run only 4.
+    for (0..8) |k| {
+        starts[k] = at;
+        at = put(&buf, at, if (k < 4) &a else &b);
+        var s: [30]u8 = undefined;
+        fillRandom(&s, 210 + k);
+        if (k < 7) at = put(&buf, at, &s);
+    }
+    const arrays = try callOn(&buf, .{ .min_unit = 23 });
+    defer freeArrays(testing.allocator, arrays);
+    try testing.expectEqual(@as(usize, 2), arrays.len);
+    try testing.expectEqualSlices(usize, starts[0..4], arrays[0].positions);
+    try testing.expectEqualSlices(usize, starts[4..], arrays[1].positions);
+}
+
+test "peel order: seeds of at least min_unit first (most copies, then longest); shorter seeds longest first" {
+    const pos = [_]usize{ 0, 100, 200, 300, 400 };
+    // (len, copies) pairs, listed in the expected order for min_unit 23.
+    const want = [_][2]usize{ .{ 23, 5 }, .{ 30, 3 }, .{ 23, 3 }, .{ 22, 2 }, .{ 20, 5 }, .{ 20, 4 }, .{ 16, 5 } };
+    var runs: [want.len]Run = undefined;
+    // Shuffle deterministically: reverse, then rotate by 3.
+    for (&runs, 0..) |*r, i| {
+        const w = want[(want.len - 1 - i + 3) % want.len];
+        r.* = .{ .start = i, .end = i + 1, .len = w[0], .copies = pos[0..w[1]] };
+    }
+    std.mem.sort(Run, &runs, @as(usize, 23), Run.peelOrder);
+    for (runs, want) |r, w| try testing.expectEqual(w, [2]usize{ r.len, r.copies.len });
+}
+
+test "an array seeded only by a run shorter than min_unit needs one copy more than min_copies" {
+    var repeat: [28]u8 = undefined;
+    fillRandom(&repeat, 222);
+    for ([_]usize{ 3, 4 }) |n| {
+        var buf: [700]u8 = undefined;
+        fillRandom(&buf, 221);
+        var at: usize = 40;
+        for (0..n) |k| {
+            // Every copy differs at column 3 or 24 (alternating), so consecutive copies share
+            // at most 20 exact bases (4..23): no seed reaches min_unit; consensus restores 28.
+            var copy = repeat;
+            const col: usize = if (k % 2 == 0) 3 else 24;
+            copy[col] = if (copy[col] == 'A') 'C' else 'A';
+            at = put(&buf, at, &copy);
+            var s: [32]u8 = undefined;
+            fillRandom(&s, 230 + k);
+            if (k + 1 < n) at = put(&buf, at, &s);
+        }
+        const arrays = try callOn(&buf, .{ .min_unit = 23 });
+        defer freeArrays(testing.allocator, arrays);
+        try testing.expectEqual(@as(usize, n - 3), arrays.len);
+    }
 }

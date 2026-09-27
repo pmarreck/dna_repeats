@@ -16,7 +16,8 @@ pub const usage =
     \\  --arrays             report arrays (merged families, distinct spacers) not families
     \\  --min-copies N       fewest copies in an array (default 3)
     \\  --min-spacer N       fewest bases between array copies (default 0)
-    \\  --crispr             CRISPR preset: --arrays, lengths 23..47, spacers 26..64
+    \\  --min-unit N         shortest array repeat after extension (default 0)
+    \\  --crispr             CRISPR preset: --arrays, repeats 23..47 (seeds from 18), spacers 26..64
     \\  -j, --threads N      worker threads (default: one per CPU)
     \\  -o, --output PATH    write results to PATH ('-' or @stdout: stdout; @stderr: stderr)
     \\  --progress           always show progress on stderr
@@ -63,6 +64,8 @@ pub const Config = struct {
     min_copies: usize = 3,
     /// Fewest bases between consecutive copies of an array.
     min_spacer: usize = 0,
+    /// Shortest array unit after consensus extension (seeds may be shorter).
+    min_unit: usize = 0,
 };
 
 pub const ParseError = error{ MissingValue, BadNumber, UnknownOption, MissingInput, ExtraInput, EmptyLengthRange };
@@ -114,20 +117,22 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
             cfg.arrays = true;
         } else if (eql(a, "--crispr")) {
             // CRISPR preset: repeats 23..47 and spacers 26..64, the published defaults of
-            // MinCED (repeats, min spacer) and PILER-CR (max spacer); array output.
+            // MinCED (repeats, min spacer) and PILER-CR (max spacer); array output. Seeds
+            // start at 18 bases so degraded arrays without an exact 23-mer are still found.
             cfg.arrays = true;
-            cfg.min_len = 23;
+            cfg.min_len = 18;
             cfg.max_len = 47;
             cfg.min_spacer = 26; // MinCED's default
             cfg.max_gap = 64; // PILER-CR's default
-        } else if (eql(a, "--min-copies") or eql(a, "--min-spacer")) {
+            cfg.min_unit = 23; // MinCED's shortest repeat
+        } else if (eql(a, "--min-copies") or eql(a, "--min-spacer") or eql(a, "--min-unit")) {
             i += 1;
             if (i >= args.len) return error.MissingValue;
             const n = std.fmt.parseInt(usize, args[i], 10) catch return error.BadNumber;
             if (eql(a, "--min-copies")) {
                 if (n < 2) return error.BadNumber;
                 cfg.min_copies = n;
-            } else cfg.min_spacer = n;
+            } else if (eql(a, "--min-unit")) cfg.min_unit = n else cfg.min_spacer = n;
         } else if (eql(a, "-j") or eql(a, "--threads")) {
             i += 1;
             if (i >= args.len) return error.MissingValue;
@@ -347,13 +352,13 @@ test "--arrays, --crispr preset, and array tuning; later wins" {
     try testing.expect((try parseArgs(&.{ "x", "--arrays" })).arrays);
     const c = try parseArgs(&.{ "x", "--crispr" });
     try testing.expect(c.arrays);
-    try testing.expectEqual(@as(usize, 23), c.min_len);
+    try testing.expectEqual(@as(usize, 18), c.min_len);
     try testing.expectEqual(@as(usize, 47), c.max_len);
     try testing.expectEqual(@as(usize, 26), c.min_spacer);
     try testing.expectEqual(@as(usize, 64), c.max_gap);
     // Options after the preset override it; options before it are overridden.
     const o = try parseArgs(&.{ "x", "--min-len", "30", "--crispr", "--max-gap", "90", "--min-copies", "2", "--min-spacer", "15" });
-    try testing.expectEqual(@as(usize, 23), o.min_len);
+    try testing.expectEqual(@as(usize, 18), o.min_len);
     try testing.expectEqual(@as(usize, 90), o.max_gap);
     try testing.expectEqual(@as(usize, 2), o.min_copies);
     try testing.expectEqual(@as(usize, 15), o.min_spacer);
@@ -502,4 +507,13 @@ test "TSV and JSON rendering" {
     w = .fixed(&buf);
     try writeJsonFamily(&w, "ACACAC", fams[0]);
     try testing.expectEqualStrings("{\"length\":2,\"count\":3,\"unit\":\"AC\",\"positions\":[0,2,4]}", w.buffered());
+}
+
+test "--min-unit: default 0, 23 under --crispr, later wins" {
+    try testing.expectEqual(@as(usize, 0), (try parseArgs(&.{"x"})).min_unit);
+    try testing.expectEqual(@as(usize, 23), (try parseArgs(&.{ "x", "--crispr" })).min_unit);
+    try testing.expectEqual(@as(usize, 30), (try parseArgs(&.{ "x", "--crispr", "--min-unit", "30" })).min_unit);
+    try testing.expectEqual(@as(usize, 23), (try parseArgs(&.{ "x", "--min-unit", "30", "--crispr" })).min_unit);
+    try testing.expectError(error.MissingValue, parseArgs(&.{ "x", "--min-unit" }));
+    try testing.expectError(error.BadNumber, parseArgs(&.{ "x", "--min-unit", "x" }));
 }
