@@ -80,16 +80,15 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
     std.mem.sort(Run, runs.items, {}, Run.moreCopiesFirst);
     var cands: std.ArrayList(Cand) = .empty;
     defer {
-        for (cands.items) |c| gpa.free(c.copies);
+        for (cands.items) |c| c.deinit(gpa);
         cands.deinit(gpa);
     }
     var covered: Coverage = .{};
     defer covered.deinit(gpa);
     for (runs.items) |r| {
         if (covered.overlaps(r.start, r.end)) continue;
-        const copies = try extend(gpa, subject, r, params);
-        errdefer gpa.free(copies);
-        const cand: Cand = .{ .start = copies[0], .end = copies[copies.len - 1] + r.len, .len = r.len, .seed = r.copies[0], .copies = copies };
+        const cand = try refine(gpa, subject, r, params);
+        errdefer cand.deinit(gpa);
         try covered.add(gpa, cand.start, cand.end);
         try cands.append(gpa, cand);
     }
@@ -123,32 +122,23 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
             if (c.copies.len > best.copies.len or (c.copies.len == best.copies.len and c.len > best.len)) best = c;
         }
         const copies = positions.items.len;
-        // Judge seed spacers before consensus extension can swallow similar ones.
-        const similar = similarSpacerFraction(subject, best.copies, best.len, params.max_spacer_identity);
-        // Conservation too is judged on the seed unit: extension adds bases up to 20% of copies
-        // disagree on, which would lower it for real arrays.
-        const conserved = conservation(subject, best.copies, subject[best.seed..][0..best.len]);
-        // Grow the unit to the bases most copies share, so spacers exclude repeat bases.
-        const ext = consensusExtension(subject, best.copies, best.len);
-        const unit_pos = best.seed - ext.left;
-        const unit_len = best.len + ext.left + ext.right;
-        const unit = subject[unit_pos..][0..unit_len];
-        for (best.copies) |*p| p.* -= ext.left;
+        const unit_len = best.len;
         const judged = copies >= params.min_copies and
-            similar <= params.max_similar_spacer_fraction and
+            // Judged on the seed columns' spacers: consensus extension can grow a unit into
+            // similar "spacers" and hide them.
+            similarSpacerFraction(subject, best.copies, best.core_off, best.core_len, params.max_spacer_identity) <= params.max_similar_spacer_fraction and
             try sharedKmerSpacerFraction(gpa, subject, best.copies, unit_len) <= params.max_shared_spacer_fraction and
-            selfSimilarity(unit) <= params.max_unit_self_similarity and
-            conserved >= params.min_repeat_conservation and
+            selfSimilarity(best.unit) <= params.max_unit_self_similarity and
+            conservation(subject, best.copies, best.unit) >= params.min_repeat_conservation and
             // Too long for CRISPR: consensus grew the unit well past the search cap (known
             // repeats reach ~50 bases, so allow a small margin), or the seed is exactly
             // extendable at the cap.
             unit_len <= params.max_unit +| consensus_margin and
-            !(best.len >= params.max_unit and unit_len == best.len and extendable(subject, best.copies, unit_len));
+            !(best.core_len >= params.max_unit and unit_len == best.core_len and extendable(subject, best.copies, unit_len));
         if (judged) {
             const owned = try gpa.dupe(usize, positions.items);
             errdefer gpa.free(owned);
-            for (owned) |*p| p.* -|= ext.left;
-            try out.append(gpa, .{ .start = cands.items[i].start -| ext.left, .end = end + ext.right, .copies = copies, .unit_len = unit_len, .unit_pos = unit_pos, .positions = owned });
+            try out.append(gpa, .{ .start = cands.items[i].start, .end = end, .copies = copies, .unit_len = unit_len, .unit_pos = best.seed, .positions = owned });
         }
         i = j;
     }
@@ -169,13 +159,22 @@ const Run = struct {
     }
 };
 
-/// An extended array candidate owning its copy positions; `seed` is an exact copy of the unit.
+/// An extended array candidate owning its copy positions and consensus unit; `seed` is
+/// the unit's position around an exact seed copy, whose columns start `core_off` bases in.
 const Cand = struct {
     start: usize,
     end: usize,
     len: usize,
     seed: usize,
+    core_off: usize,
+    core_len: usize,
     copies: []usize,
+    unit: []u8,
+
+    fn deinit(self: Cand, gpa: Allocator) void {
+        gpa.free(self.copies);
+        gpa.free(self.unit);
+    }
 
     fn lessByStart(_: void, a: Cand, b: Cand) bool {
         return a.start < b.start;
@@ -220,23 +219,50 @@ const Coverage = struct {
     }
 };
 
-/// Seed-and-extend: from the run's first and last copies, repeatedly take the nearest
-/// window within the spacer bounds whose Hamming distance to the run's unit is within
-/// the mismatch budget. Returns all copy positions, ascending (caller owns).
+/// Seed-and-extend with refinement: extend from the exact seed run, grow the unit to the
+/// columns most copies share (consensusExtension), then extend again from the outermost
+/// copies with the grown unit's majority-vote consensus. Its longer length allows more
+/// mismatches and its bases are not biased toward one mutated copy, so degraded copies the
+/// short seed missed (or matched at a shifted offset) are found at their true starts.
+/// complexity: O(copies * unit length + added copies * (max_spacer - min_spacer) * unit length).
+fn refine(gpa: Allocator, subject: []const u8, run: Run, params: Params) Allocator.Error!Cand {
+    const first = try extend(gpa, subject, run.copies, subject[run.copies[0]..][0..run.len], params);
+    defer gpa.free(first);
+    const ext = consensusExtension(subject, first, run.len);
+    const len = run.len + ext.left + ext.right;
+    for (first) |*p| p.* -= ext.left;
+    const unit = try consensus(gpa, subject, first, len);
+    errdefer gpa.free(unit);
+    const copies = try extend(gpa, subject, first, unit, params);
+    return .{
+        .start = copies[0],
+        .end = copies[copies.len - 1] + len,
+        .len = len,
+        .seed = run.copies[0] - ext.left,
+        .core_off = ext.left,
+        .core_len = run.len,
+        .copies = copies,
+        .unit = unit,
+    };
+}
+
+/// From the first and last anchors, repeatedly take the nearest window within the spacer
+/// bounds whose Hamming distance to `unit` is within the mismatch budget. Returns the
+/// anchors plus every copy found, ascending (caller owns).
 /// complexity: O(added copies * (max_spacer - min_spacer) * unit length).
-fn extend(gpa: Allocator, subject: []const u8, run: Run, params: Params) Allocator.Error![]usize {
-    const unit = subject[run.copies[0]..][0..run.len];
-    const budget: usize = @intFromFloat(@floor(params.max_copy_mismatch_fraction * @as(f64, @floatFromInt(run.len))));
+fn extend(gpa: Allocator, subject: []const u8, anchors: []const usize, unit: []const u8, params: Params) Allocator.Error![]usize {
+    const len = unit.len;
+    const budget: usize = @intFromFloat(@floor(params.max_copy_mismatch_fraction * @as(f64, @floatFromInt(len))));
     var left: std.ArrayList(usize) = .empty;
     defer left.deinit(gpa);
-    var cur = run.copies[0];
-    while (cur >= run.len + params.min_spacer) {
-        const hi = cur - run.len - params.min_spacer; // nearest allowed start going left
-        const lo = cur -| (run.len + params.max_spacer);
+    var cur = anchors[0];
+    while (cur >= len + params.min_spacer) {
+        const hi = cur - len - params.min_spacer; // nearest allowed start going left
+        const lo = cur -| (len + params.max_spacer);
         var q = hi + 1;
         const found = while (q > lo) {
             q -= 1;
-            if (hamming(subject[q..][0..run.len], unit) <= budget) break q;
+            if (hamming(subject[q..][0..len], unit) <= budget) break q;
         } else null;
         cur = found orelse break;
         try left.append(gpa, cur);
@@ -245,19 +271,38 @@ fn extend(gpa: Allocator, subject: []const u8, run: Run, params: Params) Allocat
     errdefer all.deinit(gpa);
     var k = left.items.len;
     while (k > 0) : (k -= 1) try all.append(gpa, left.items[k - 1]);
-    try all.appendSlice(gpa, run.copies);
-    cur = run.copies[run.copies.len - 1];
+    try all.appendSlice(gpa, anchors);
+    cur = anchors[anchors.len - 1];
     while (true) {
-        const lo = cur + run.len + params.min_spacer;
-        const hi = @min(cur + run.len + params.max_spacer, subject.len -| run.len);
+        const lo = cur + len + params.min_spacer;
+        const hi = @min(cur + len + params.max_spacer, subject.len -| len);
         var q = lo;
         const found = while (q <= hi) : (q += 1) {
-            if (hamming(subject[q..][0..run.len], unit) <= budget) break q;
+            if (hamming(subject[q..][0..len], unit) <= budget) break q;
         } else null;
         cur = found orelse break;
         try all.append(gpa, cur);
     }
     return all.toOwnedSlice(gpa);
+}
+
+/// Majority base at each of `len` columns over the copies (ties to the earlier of ACGT;
+/// a column with no A/C/G/T keeps the first copy's byte). Caller owns the result.
+fn consensus(gpa: Allocator, subject: []const u8, copies: []const usize, len: usize) Allocator.Error![]u8 {
+    const unit = try gpa.alloc(u8, len);
+    for (unit, 0..) |*u, col| {
+        var counts = [_]usize{0} ** 4;
+        for (copies) |p| switch (subject[p + col]) {
+            'A' => counts[0] += 1,
+            'C' => counts[1] += 1,
+            'G' => counts[2] += 1,
+            'T' => counts[3] += 1,
+            else => {},
+        };
+        const top = std.mem.indexOfMax(usize, &counts);
+        u.* = if (counts[top] == 0) subject[copies[0] + col] else "ACGT"[top];
+    }
+    return unit;
 }
 
 fn hamming(a: []const u8, b: []const u8) usize {
@@ -267,14 +312,15 @@ fn hamming(a: []const u8, b: []const u8) usize {
 }
 
 /// Share of spacer pairs whose positional identity (matching bases over the longer
-/// length) exceeds `threshold`. complexity: O(k^2 * spacer length) for k copies.
-fn similarSpacerFraction(subject: []const u8, copies: []const usize, len: usize, threshold: f64) f64 {
+/// length) exceeds `threshold`; spacers lie between the unit columns [off, off + len) of
+/// consecutive copies. complexity: O(k^2 * spacer length) for k copies.
+fn similarSpacerFraction(subject: []const u8, copies: []const usize, off: usize, len: usize, threshold: f64) f64 {
     var pairs: usize = 0;
     var similar: usize = 0;
     for (0..copies.len - 1) |i| {
-        const a = subject[copies[i] + len .. copies[i + 1]];
+        const a = subject[copies[i] + off + len .. copies[i + 1] + off];
         for (i + 1..copies.len - 1) |j| {
-            const b = subject[copies[j] + len .. copies[j + 1]];
+            const b = subject[copies[j] + off + len .. copies[j + 1] + off];
             const longer = @max(a.len, b.len);
             pairs += 1;
             if (longer == 0) {
@@ -288,22 +334,52 @@ fn similarSpacerFraction(subject: []const u8, copies: []const usize, len: usize,
     }
     return if (pairs == 0) 0 else @as(f64, @floatFromInt(similar)) / @as(f64, @floatFromInt(pairs));
 }
-/// Bases the unit can grow by on each side: while at least `consensus_agreement` of
-/// the copies share the next base, keeping every spacer at least `min_residual_spacer`
-/// long and inside the subject. Recovers a repeat's true boundaries when the exact
-/// seed was shorter (degraded or truncated ends).
+
+/// Bases the unit can grow by on each side, keeping every spacer at least
+/// `min_residual_spacer` long and inside the subject. Recovers a repeat's true boundaries
+/// when the exact seed was shorter (degraded or truncated ends). X-drop extension (as in
+/// BLAST): a column where at least `consensus_agreement` of the copies share the base
+/// scores +1, any other column -`weak_column_penalty`; growth stops once the score falls
+/// `xdrop` below its best and keeps the best-scoring length, so one mutated column is
+/// crossed when strong ones follow, while unrelated spacer bases are not taken.
 fn consensusExtension(subject: []const u8, copies: []const usize, len: usize) struct { left: usize, right: usize } {
     var min_gap: usize = std.math.maxInt(usize);
     for (copies[0 .. copies.len - 1], copies[1..]) |a, b| min_gap = @min(min_gap, b - a - len);
     const room = min_gap -| min_residual_spacer;
     var left: usize = 0;
+    {
+        var score: isize = 0;
+        var best: isize = 0;
+        var e: usize = 0;
+        while (e < room and copies[0] > e) {
+            e += 1;
+            score += if (agreeAt(subject, copies, -@as(isize, @intCast(e)))) 1 else -weak_column_penalty;
+            if (score > best) {
+                best = score;
+                left = e;
+            } else if (best - score >= xdrop) break;
+        }
+    }
     var right: usize = 0;
-    while (left + right < room and copies[0] > left and agreeAt(subject, copies, -@as(isize, @intCast(left)) - 1)) left += 1;
-    while (left + right < room and copies[copies.len - 1] + len + right < subject.len and agreeAt(subject, copies, @intCast(len + right))) right += 1;
+    {
+        var score: isize = 0;
+        var best: isize = 0;
+        var e: usize = 0;
+        while (left + e < room and copies[copies.len - 1] + len + e < subject.len) {
+            score += if (agreeAt(subject, copies, @intCast(len + e))) 1 else -weak_column_penalty;
+            e += 1;
+            if (score > best) {
+                best = score;
+                right = e;
+            } else if (best - score >= xdrop) break;
+        }
+    }
     return .{ .left = left, .right = right };
 }
 
 const consensus_agreement = 0.8;
+const weak_column_penalty = 2;
+const xdrop = 4;
 const min_residual_spacer = 8;
 /// Bases consensus may add beyond the search cap before a repeat counts as too long.
 const consensus_margin = 8;
@@ -746,4 +822,65 @@ test "spacers sharing 10-mers (a coding motif at shifting offsets) are not an ar
     const arrays = try callOn(&buf, .{});
     defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
+}
+
+test "copies past the seed's mismatch budget are found by re-extending with the consensus unit" {
+    var buf: [900]u8 = undefined;
+    fillRandom(&buf, 161);
+    var repeat: [34]u8 = undefined;
+    fillRandom(&repeat, 162);
+    const flip = struct {
+        fn at(copy: []u8, cols: []const usize) void {
+            for (cols) |i| copy[i] = if (copy[i] == 'A') 'C' else 'A';
+        }
+    }.at;
+    var at: usize = 30;
+    var starts: [9]usize = undefined;
+    for (0..9) |k| {
+        var copy = repeat;
+        // Copies 0 and 1 share the exact 22-mer at columns 6..27 (the seed). Copies 2..6
+        // differ from it at 2 columns, within the seed's budget (3 of 20..22); copies 7 and 8
+        // at 4, past it, but within the budget of the consensus-extended unit (5 of 34).
+        switch (k) {
+            0 => flip(&copy, &.{5}),
+            1 => flip(&copy, &.{28}),
+            2...6 => flip(&copy, &.{ 10 + k, 20 - k }),
+            else => flip(&copy, &.{ 10, 13 + k, 16, 23 }),
+        }
+        starts[k] = at;
+        at = put(&buf, at, &copy);
+        var s: [30]u8 = undefined;
+        fillRandom(&s, 170 + k);
+        if (k < 8) at = put(&buf, at, &s);
+    }
+    const arrays = try callOn(&buf, .{});
+    defer freeArrays(testing.allocator, arrays);
+    try testing.expectEqual(@as(usize, 1), arrays.len);
+    try testing.expectEqualSlices(usize, &starts, arrays[0].positions);
+    try testing.expectEqual(@as(usize, 34), arrays[0].unit_len);
+}
+
+test "consensus extension continues past one weakly agreeing column when strong ones follow" {
+    var buf: [1100]u8 = undefined;
+    fillRandom(&buf, 181);
+    var repeat: [34]u8 = undefined;
+    fillRandom(&repeat, 182);
+    var at: usize = 30;
+    var starts: [10]usize = undefined;
+    for (0..10) |k| {
+        var copy = repeat;
+        // Column 22 agrees in only 7 of 10 copies (under consensus_agreement); the 11
+        // columns after it agree in all.
+        if (k % 3 == 1) copy[22] = if (copy[22] == 'A') 'C' else 'A';
+        starts[k] = at;
+        at = put(&buf, at, &copy);
+        var s: [32]u8 = undefined;
+        fillRandom(&s, 190 + k);
+        if (k < 9) at = put(&buf, at, &s);
+    }
+    const arrays = try callOn(&buf, .{});
+    defer freeArrays(testing.allocator, arrays);
+    try testing.expectEqual(@as(usize, 1), arrays.len);
+    try testing.expectEqual(@as(usize, 34), arrays[0].unit_len);
+    try testing.expectEqualSlices(usize, &starts, arrays[0].positions);
 }
