@@ -62,3 +62,7 @@
 {"commit":"dd23734","when":"2026-09-26T23:03:30-04:00","machine":"82bbb9f01c00","set":"div-10","tool":"dnarepeats","el4":20,"recalled":5,"predictions":7,"correct":7,"wall_s":0.02,"peak_kb":2116}
 {"commit":"dd23734","when":"2026-09-26T23:04:41-04:00","machine":"82bbb9f01c00","set":"div-12","tool":"dnarepeats","el4":20,"recalled":1,"predictions":2,"correct":2,"wall_s":0.02,"peak_kb":2116}
 {"commit":"dd23734","when":"2026-09-26T23:05:52-04:00","machine":"82bbb9f01c00","set":"div-15","tool":"dnarepeats","el4":20,"recalled":0,"predictions":0,"correct":0,"wall_s":0.02,"peak_kb":2116}
+{"commit":"fcad6b7","when":"2026-09-26T23:12:07-04:00","machine":"82bbb9f01c00","set":"heldout3","tool":"minced","el4":73,"recalled":67,"predictions":71,"correct":67,"wall_s":15.93,"peak_kb":479096}
+{"commit":"fcad6b7","when":"2026-09-26T23:12:07-04:00","machine":"82bbb9f01c00","set":"heldout3","tool":"pilercr","el4":73,"recalled":63,"predictions":75,"correct":71,"wall_s":24.93,"peak_kb":25912}
+{"commit":"fcad6b7","when":"2026-09-26T23:12:07-04:00","machine":"82bbb9f01c00","set":"heldout3","tool":"dnarepeats","el4":73,"recalled":68,"predictions":74,"correct":71,"wall_s":2.34,"peak_kb":11292}
+{"commit":"fcad6b7","when":"2026-09-26T23:12:07-04:00","machine":"82bbb9f01c00","set":"heldout3","tool":"dnarepeats_raw","el4":73,"recalled":62,"predictions":84818,"correct":5027,"wall_s":2.61,"peak_kb":11292}
