@@ -77,7 +77,9 @@ pub fn main(init: std.process.Init) !u8 {
     const env = init.environ_map;
     var err_buf: [1024]u8 = undefined;
     const stderr_file = std.Io.File.stderr();
-    var err_writer = stderr_file.writer(io, &err_buf);
+    // Streaming, not positional: a positional writer starts at offset 0 and would overwrite
+    // earlier output when several runs share one redirected file (`{ a; b; } > out`).
+    var err_writer = stderr_file.writerStreaming(io, &err_buf);
     const stderr = &err_writer.interface;
     defer stderr.flush() catch {};
 
@@ -114,7 +116,7 @@ pub fn main(init: std.process.Init) !u8 {
                     try stderr.print("dna-repeats: cannot open {s}: {s}\n", .{ path, @errorName(e) });
                     return 1;
                 };
-                break :blk direct.?.writer(io, &out_buf);
+                break :blk direct.?.writerStreaming(io, &out_buf);
             }
             atomic = std.Io.Dir.cwd().createFileAtomic(io, path, .{ .replace = true }) catch |e| {
                 try stderr.print("dna-repeats: cannot create {s}: {s}\n", .{ path, @errorName(e) });
@@ -122,7 +124,7 @@ pub fn main(init: std.process.Init) !u8 {
             };
             break :blk atomic.?.file.writer(io, &out_buf);
         },
-        else => std.Io.File.stdout().writer(io, &out_buf),
+        else => std.Io.File.stdout().writerStreaming(io, &out_buf),
     };
     const out = if (cfg.output == .stderr) stderr else &out_writer.interface;
 

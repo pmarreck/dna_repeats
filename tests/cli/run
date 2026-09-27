@@ -208,5 +208,16 @@ capture "$bin" "${run[@]}" -o "$work/pipe" "$work/sample.txt"
 wait
 expect_rc $t 0 && expect_eq $t "$(cat "$work/from-pipe.tsv")" "$tsv" && [ -p "$work/pipe" ] && pass $t || fail $t "pipe replaced or content wrong"
 
+t=stdout-file-shared-by-two-runs
+{ "$bin" "${run[@]}" "$work/sample.txt"; "$bin" "${run[@]}" "$work/sample.txt"; } >"$work/twice.tsv" 2>"$work/stderr"
+rc=$?; err=$(cat "$work/stderr")
+expect_rc $t 0 && expect_eq $t "$(cat "$work/twice.tsv")" "$tsv
+$tsv" && pass $t
+
+t=stderr-file-shared-by-two-runs
+{ "$bin" "${run[@]}" "$work/sample.txt"; "$bin" "${run[@]}" "$work/sample.txt"; } >/dev/null 2>"$work/twice.err"
+rc=$?; err=$(cat "$work/twice.err")
+expect_rc $t 0 && expect_eq $t "$(grep -c "families in" "$work/twice.err")" 2 && pass $t
+
 printf '%d passed, %d failed\n' "$passes" "$fails"
 exit "$fails"
