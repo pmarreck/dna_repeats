@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Divergence robustness: recall and precision of every tool as planted repeat copies are
+# mutated at rising per-base substitution rates (bench/plant-arrays, seed 1, 20 arrays in
+# 1 Mb per rate). Results go to the scoreboard log with set label div-<rate>.
+# usage: bench/divergence [TOOL...]
+set -u
+cd "$(dirname "$0")/.." || exit 1
+[ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
+work=$(mktemp -d "${TMPDIR:-/tmp}/divergence.XXXXXX") || exit 1
+trap 'rm -r "$work"' EXIT
+for rate in 0 2 4 6 8 10 12 15; do
+	mkdir -p "$work/r$rate"
+	bench/plant-arrays 1 20 "$rate" "$work/r$rate/planted"
+	mv "$work/r$rate/planted.truth.tsv" "$work/r$rate.truth.tsv"
+	bench/scoreboard --genomes "$work/r$rate" --truth "$work/r$rate.truth.tsv" --label "div-$rate" "$@" | sed 1d
+done

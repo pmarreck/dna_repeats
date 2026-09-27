@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Divergence benchmark input: CRISPR-like arrays planted in random DNA, each repeat copy
+# mutated by per-base substitution at RATE percent. Writes OUT.fa and OUT.truth.tsv
+# (CRISPRCasdb truth layout: accession, organism, 1-based start, length, orientation,
+# evidence level 4, repeat). Arrays: repeat 28-36 bp, 5-15 copies, spacers 30-40 bp,
+# at evenly spaced slots in a 1 Mb genome. Integer LCG only, so every awk agrees.
+# usage: bench/plant-arrays SEED N_ARRAYS RATE_PERCENT OUT_PREFIX
+set -u
+seed=${1:?usage: plant-arrays SEED N RATE OUT}; n=${2:?}; rate=${3:?}; out=${4:?}
+acc="planted_s${seed}_r${rate}"
+awk -v seed="$seed" -v n="$n" -v rate="$rate" -v acc="$acc" -v fa="$out.fa" -v truth="$out.truth.tsv" '
+function rnd() { s = (s * 16807) % 2147483647; return s }
+function base() { return b[1 + rnd() % 4] }
+function randseq(len,   x, k) { x = ""; for (k = 0; k < len; k++) x = x base(); return x }
+function mutate(x,   k, y, c) {
+	y = ""
+	for (k = 1; k <= length(x); k++) {
+		c = substr(x, k, 1)
+		if (rnd() % 10000 < rate * 100) { do { d = base() } while (d == c); c = d }
+		y = y c
+	}
+	return y
+}
+function emit(str,   k) {
+	for (k = 1; k <= length(str); k++) {
+		line = line substr(str, k, 1); made++
+		if (length(line) == 60) { print line > fa; line = "" }
+	}
+}
+BEGIN {
+	GENOME = 1000000
+	split("A C G T", b, " ")
+	s = seed % 2147483647; if (s <= 0) s += 2147483646
+	print ">" acc " planted CRISPR-like arrays, substitution rate " rate "%" > fa
+	made = 0; line = ""
+	for (a = 1; a <= n; a++) {
+		slot = int(GENOME * a / (n + 1))
+		while (made < slot) emit(base())
+		dr = randseq(28 + rnd() % 9); copies = 5 + rnd() % 11
+		start = made + 1
+		for (c = 1; c <= copies; c++) {
+			emit(mutate(dr))
+			if (c < copies) emit(randseq(30 + rnd() % 11))
+		}
+		print acc "\tsynthetic\t" start "\t" (made - start + 1) "\t1\t4\t" dr > truth
+	}
+	while (made < GENOME) emit(base())
+	if (line != "") print line > fa
+}'

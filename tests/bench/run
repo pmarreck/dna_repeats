@@ -51,4 +51,20 @@ check empty-inputs-numeric "$got" $'TOTAL\tel4=0\trecalled=0\tpredictions=0\tcor
 got=$(${AWK:-awk} -f bench/score.awk /dev/null <(printf 'Z\t5\t50\n') | tail -1)
 check empty-truth-predictions-are-wrong "$got" $'TOTAL\tel4=0\trecalled=0\tpredictions=1\tcorrect=0'
 
+# bench/plant-arrays SEED N_ARRAYS RATE_PERCENT OUT_PREFIX: FASTA plus CRISPRCasdb-style truth.
+pdir=$(mktemp -d "${TMPDIR:-/tmp}/plant-test.XXXXXX") || exit 1
+trap 'rm -r "$pdir"' EXIT
+pa="$pdir/p"
+bash bench/plant-arrays 3 4 0 "$pa"
+check plant-array-count "$(wc -l <"$pa.truth.tsv" | tr -d ' ')" 4
+seq=$(grep -v '^>' "$pa.fa" | tr -d '\n')
+ok=1
+while IFS=$'\t' read -r acc org start len orient el dr; do
+	[ "${seq:$((start - 1)):${#dr}}" = "$dr" ] || ok=0
+	[ "${seq:$((start + len - 1 - ${#dr})):${#dr}}" = "$dr" ] || ok=0 # last copy ends the array
+done <"$pa.truth.tsv"
+check plant-exact-copies-at-rate-0 "$ok" 1
+bash bench/plant-arrays 3 4 0 "$pa.2"
+check plant-deterministic "$(cat "$pa.fa" "$pa.truth.tsv" | sha256sum)" "$(cat "$pa.2.fa" "$pa.2.truth.tsv" | sha256sum)"
+
 exit "$fails"
