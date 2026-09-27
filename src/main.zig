@@ -149,14 +149,13 @@ pub fn main(init: std.process.Init) !u8 {
         return 1;
     };
     defer gpa.free(raw);
-    const clean_buf = try gpa.alloc(u8, raw.len);
-    defer gpa.free(clean_buf);
+    // Normalized in place: output never overtakes input, so no second copy is needed.
     var diag: norm.Diagnostic = .{};
     // FASTA when the first non-whitespace byte is '>'; otherwise one plain, strict sequence.
     const trimmed = std.mem.trimStart(u8, raw, " \t\r\n");
     const is_fasta = trimmed.len > 0 and trimmed[0] == '>';
     var single: [1]norm.Record = undefined;
-    const records: []const norm.Record = if (is_fasta) norm.parseFasta(gpa, raw, clean_buf, &diag) catch |e| switch (e) {
+    const records: []const norm.Record = if (is_fasta) norm.parseFasta(gpa, raw, raw, &diag) catch |e| switch (e) {
         error.OutOfMemory => return e,
         error.MissingHeader => {
             try stderr.print("dna-repeats: sequence before the first FASTA header at input offset {d}\n", .{diag.offset});
@@ -167,13 +166,13 @@ pub fn main(init: std.process.Init) !u8 {
             return 1;
         },
     } else blk: {
-        single[0] = .{ .name = "", .seq = norm.normalize(raw, clean_buf, &diag) catch {
+        single[0] = .{ .name = "", .seq = norm.normalize(raw, raw, &diag) catch {
             try stderr.print("dna-repeats: invalid byte 0x{x:0>2} at input offset {d}\n", .{ diag.byte, diag.offset });
             return 1;
         } };
         break :blk &single;
     };
-    defer if (is_fasta) gpa.free(records);
+    defer if (is_fasta) norm.freeRecords(gpa, records);
 
     var num: [64]u8 = undefined;
     var bases: usize = 0;

@@ -30,7 +30,8 @@ pub fn normalize(raw: []const u8, out: []u8, diag: *Diagnostic) Error![]u8 {
 }
 
 pub const Record = struct {
-    /// First word of the header line, borrowed from the raw input.
+    /// First word of the header line, owned (see freeRecords): parsing may run in place
+    /// and overwrite the raw header bytes.
     name: []const u8,
     /// Normalized bases (A/C/G/T, ambiguity codes as N), borrowed from `out`.
     seq: []u8,
@@ -39,10 +40,14 @@ pub const Record = struct {
 /// Parse FASTA: each '>' line starts a record named by its first word; sequence
 /// lines follow `normalize`'s rules, except that IUPAC ambiguity codes
 /// (N R Y K M S W B D H V, either case) become N, which the finder never matches.
-/// Sequence bytes before the first header are an error. `out` must hold raw.len bytes.
+/// Sequence bytes before the first header are an error. `out` must hold raw.len bytes and
+/// may be `raw` itself: output never overtakes input. Free the result with freeRecords.
 pub fn parseFasta(gpa: std.mem.Allocator, raw: []const u8, out: []u8, diag: *Diagnostic) (Error || error{ MissingHeader, OutOfMemory })![]Record {
     var records: std.ArrayList(Record) = .empty;
-    errdefer records.deinit(gpa);
+    errdefer {
+        for (records.items) |r| gpa.free(r.name);
+        records.deinit(gpa);
+    }
     var n: usize = 0;
     var seq_start: usize = 0;
     var pos: usize = 0;
@@ -52,7 +57,9 @@ pub fn parseFasta(gpa: std.mem.Allocator, raw: []const u8, out: []u8, diag: *Dia
         if (line.len > 0 and line[0] == '>') {
             if (records.items.len > 0) records.items[records.items.len - 1].seq = out[seq_start..n];
             var words = std.mem.tokenizeAny(u8, line[1..], " \t\r");
-            try records.append(gpa, .{ .name = words.next() orelse "", .seq = out[n..n] });
+            const name = try gpa.dupe(u8, words.next() orelse "");
+            errdefer gpa.free(name);
+            try records.append(gpa, .{ .name = name, .seq = out[n..n] });
             seq_start = n;
         } else for (line, pos..) |byte, i| {
             const clean: u8 = switch (byte) {
@@ -76,6 +83,11 @@ pub fn parseFasta(gpa: std.mem.Allocator, raw: []const u8, out: []u8, diag: *Dia
     }
     if (records.items.len > 0) records.items[records.items.len - 1].seq = out[seq_start..n];
     return records.toOwnedSlice(gpa);
+}
+
+pub fn freeRecords(gpa: std.mem.Allocator, records: []const Record) void {
+    for (records) |r| gpa.free(r.name);
+    gpa.free(records);
 }
 
 const testing = std.testing;
@@ -130,7 +142,7 @@ fn expectFasta(raw: []const u8, want: []const [2][]const u8) !void {
     var buf: [128]u8 = undefined;
     var diag: Diagnostic = .{};
     const recs = try parseFasta(testing.allocator, raw, &buf, &diag);
-    defer testing.allocator.free(recs);
+    defer freeRecords(testing.allocator, recs);
     try testing.expectEqual(want.len, recs.len);
     for (recs, want) |r, w| {
         try testing.expectEqualStrings(w[0], r.name);
@@ -170,7 +182,7 @@ test "FASTA: every sequence byte value is classified" {
         var diag: Diagnostic = .{};
         const raw = [_]u8{ '>', 'x', '\n', @intCast(b) };
         if (parseFasta(testing.allocator, &raw, &buf, &diag)) |recs| {
-            defer testing.allocator.free(recs);
+            defer freeRecords(testing.allocator, recs);
             const s = recs[0].seq;
             if (s.len == 0) skipped += 1 else if (s[0] == 'N') ambiguous += 1 else base += 1;
         } else |_| rejected += 1;
@@ -179,4 +191,27 @@ test "FASTA: every sequence byte value is classified" {
     try testing.expectEqual(@as(usize, 22), ambiguous); // NRYKMSWBDHV, both cases
     try testing.expectEqual(@as(usize, 6), skipped); // space \t \v \f \r -
     try testing.expectEqual(@as(usize, 254 - 36), rejected);
+}
+
+test "normalize works in place (output aliasing input)" {
+    const raw = "acgt\nAC-GT\r\n\tGG TT";
+    var buf: [raw.len]u8 = raw.*;
+    var diag: Diagnostic = .{};
+    try testing.expectEqualStrings("ACGTACGTGGTT", try normalize(&buf, &buf, &diag));
+}
+
+test "FASTA parsed in place keeps every record name" {
+    // Later records' names sit in bytes that earlier sequence output overwrites.
+    const raw = ">first one\nacgt\nACGT\n>second\nGGNN\n>third x\nTT\n";
+    var buf: [raw.len]u8 = raw.*;
+    var diag: Diagnostic = .{};
+    const recs = try parseFasta(testing.allocator, &buf, &buf, &diag);
+    defer freeRecords(testing.allocator, recs);
+    try testing.expectEqual(@as(usize, 3), recs.len);
+    try testing.expectEqualStrings("first", recs[0].name);
+    try testing.expectEqualStrings("ACGTACGT", recs[0].seq);
+    try testing.expectEqualStrings("second", recs[1].name);
+    try testing.expectEqualStrings("GGNN", recs[1].seq);
+    try testing.expectEqualStrings("third", recs[2].name);
+    try testing.expectEqualStrings("TT", recs[2].seq);
 }
