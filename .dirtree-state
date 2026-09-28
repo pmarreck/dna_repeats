@@ -4,6 +4,7 @@ annotate=[
 	CODE_REVIEW.md = Deep code review 2026-09-26: status table plus five reviewers' findings (memory, complexity, correctness, tests, structure)
 	INTENT.md = Project purpose, constraints and verification
 	PLAN.md = Open work
+	README.md = Project README: headline charts, quick start, usage, bench/verify, method, limits
 	ZIG_RECENT_API_CHANGES.md = Symlink to Peter's Zig 0.14-0.16 API cheatsheet (Obsidian vault)
 	bench = Benchmark inputs and logs: gen-corpus plus <machine-id>.ndjson history
 	bench/charts = README charts: latest scoreboard rows -> docs/img/heldout3.svg and divergence.svg (LuaJIT, pure SVG renderers)
