@@ -4,23 +4,30 @@ Fast, accurate detection of CRISPR arrays and other gap-separated DNA repeats.
 
 On 30 bacterial and archaeal genomes held out from all development, dna-repeats found
 more of the curated CRISPR arrays than [MinCED](https://github.com/ctSkennerton/minced)
-and [PILER-CR](https://www.drive5.com/pilercr/), reported fewer false ones, got the
-repeat sequence exactly right more often, and did it 3.6 to 5.9 times faster on one core
-while using 1.7 to 35 times less memory. Neither MinCED nor PILER-CR can use more than one
+and [PILER-CR](https://www.drive5.com/pilercr/), got the repeat sequence exactly right more
+often, and did it 3.6 to 5.9 times faster on one core while using 1.7 to 35 times less memory.
+False predictions are about even: 3 against their 4 and 4 when any CRISPRCasdb array counts as
+true, 5 against 4 and 5 when only curated (evidence level 4) arrays do. Neither MinCED nor PILER-CR can use more than one
 thread; dna-repeats uses every core by default and scans those 30 genomes in about half a
 second, 27 to 44 times faster than either.
 
 ![Held-out set #3: recall, precision, exact repeat sequence, time on one core and peak memory for dna-repeats, MinCED and PILER-CR](docs/img/heldout3.svg)
 
-| Held-out set #3 | Recall | Precision | Exact repeat | Time | Peak memory |
-|---|---|---|---|---|---|
-| **dna-repeats**, one thread | **68/73** | **95.9%** | **83.3%** | **4.15 s** | **14.0 MB** |
-| **dna-repeats**, 128 threads (default) | **68/73** | **95.9%** | **83.3%** | **0.56 s** | **11.0 MB** |
-| MinCED 0.4.2 (single-threaded) | 67/73 | 94.4% | 76.1% | 15.07 s | 488.2 MB |
-| PILER-CR 1.06 (single-threaded) | 63/73 | 94.7% | 73.2% | 24.61 s | 24.3 MB |
+| Held-out set #3 | Recall (curated) | Precision (any array) | Precision (curated) | Exact repeat | Time | Peak memory |
+|---|---|---|---|---|---|---|
+| **dna-repeats**, one thread | **68/73** | **95.9%** (71/74) | 93.2% (69/74) | **83.3%** | **4.15 s** | **14.0 MB** |
+| **dna-repeats**, 128 threads (default) | **68/73** | **95.9%** (71/74) | 93.2% (69/74) | **83.3%** | **0.56 s** | **11.0 MB** |
+| MinCED 0.4.2 (single-threaded) | 67/73 | 94.4% (67/71) | **94.4%** (67/71) | 76.1% | 15.07 s | 488.2 MB |
+| PILER-CR 1.06 (single-threaded) | 63/73 | 94.7% (71/75) | 93.3% (70/75) | 73.2% | 24.61 s | 24.3 MB |
 
-Times are wall-clock for all 30 genomes on a 64-core AMD Threadripper 3990X (128 hardware
-threads). Results are identical at every thread count. More threads stop paying off past
+Recall counts the 73 curated (evidence level 4) CRISPRCasdb arrays. "Precision (any array)"
+counts a prediction as true when half of it lies inside any CRISPRCasdb array, including
+lower-evidence candidates; "Precision (curated)" only inside curated ones. Exact repeat is
+the share of predictions overlapping a truth array with a repeat sequence whose repeat
+matches it exactly (60/72, 51/67, 52/71). Time is wall-clock summed over the 30 genomes,
+from one scoreboard pass on a quiet machine (a busy machine measured 4.80 s at one thread);
+peak memory is that of the largest genome. The machine is a 64-core AMD Threadripper 3990X
+(128 hardware threads). Results are identical at every thread count. More threads stop paying off past
 about 48 here: a thread sweep measured 4.19 s at 1, 616 ms at 16, 511 ms at 48 and 589 ms
 at 128 (hyperfine, 5 runs each), so `-j 48` is the fastest setting on this machine.
 
@@ -89,10 +96,15 @@ bench/verify
 ```
 
 ```
-One thread on held-out #3: dna-repeats 4.11 s, 13 MB; 3.6x faster than MinCED, 5.8x faster than PILER-CR; ...
-All 128 CPUs: dna-repeats 0.54 s, 27x faster than MinCED, 44x faster than PILER-CR.
-VERIFIED: 23 of 23 expected results reproduced exactly.
+ART loci: 8 of 8 match their expected result (an --art array upstream of the RT, or none).
+
+One thread on held-out #3: dna-repeats 4.73 s, 14 MB; 3.2x faster than MinCED, 5.2x faster than PILER-CR; 35x less memory than MinCED, 1.7x less than PILER-CR.
+All 128 CPUs: dna-repeats 0.64 s, 23x faster than MinCED, 39x faster than PILER-CR.
+VERIFIED: 31 of 31 expected results reproduced exactly.
 ```
+
+(A run on 2026-09-28 at commit d339f0e, with other work loading the machine; on a quiet
+machine the times are those in the table above.)
 
 It reruns held-out set #3, a negative control (the development genomes with their bases
 shuffled, where every reported array is false; all tools report none) and the divergence
@@ -138,7 +150,8 @@ prediction counts as correct when at least half of it lies inside any CRISPRCasd
 On one thread on *E. coli*, step 1 takes 71% of the time, step 2 28% and step 3 1%. The
 prefilter used to be a second regular expression and took 98%; the Zig version gives
 exactly the same positions (checked against the regex on every short input and on real
-genomes) 12.7 times faster.
+genomes). With it, one-thread time on held-out set #3 fell from 59.0 s to 4.65 s end to end
+(12.7 times; measured once when the change was made, and the 59 s run was not logged).
 
 ## Limits
 

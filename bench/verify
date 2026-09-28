@@ -31,14 +31,17 @@ while IFS=$'\t' read -r set tool want; do
 done < <(grep -v '^#' bench/expected.tsv | awk -F'\t' -v OFS='\t' '{row = $3; for (i = 4; i <= NF; i++) row = row "\t" $i; print $1, $2, row}')
 
 # ART loci (intents/art_search.md): each locus must match its expected found/none.
+art_n=0 art_ok=0
 while IFS=$'\t' read -r acc got phage set want _; do
-	checked=$((checked + 1))
+	checked=$((checked + 1)) art_n=$((art_n + 1))
+	[ "$got" = "$want" ] && art_ok=$((art_ok + 1))
 	if [ "$got" != "$want" ]; then
 		mismatched=$((mismatched + 1))
 		printf 'MISMATCH ART %s (%s): got %s want %s\n' "$acc" "$phage" "$got" "$want" >&2
 	fi
 done <"$work/art.tsv"
-printf 'ART loci: %d of %d with an --art array upstream of the RT, as expected.\n' "$(grep -c '	found	' "$work/art.tsv")" "$(wc -l <"$work/art.tsv" | tr -d ' ')"
+# Counted from the comparison itself: a grep for "found" would also match the expected column.
+printf 'ART loci: %d of %d match their expected result (an --art array upstream of the RT, or none).\n' "$art_ok" "$art_n"
 
 echo
 jq -rs 'map(select(.set == "heldout3")) | (map({key: .tool, value: .}) | from_entries) as $r
