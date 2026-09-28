@@ -184,6 +184,12 @@ in {
 		cmpress $out/Rfam.cm
 	'';
 	infernal = import ./infernal.nix { inherit pkgs; };
+	# Pfam-A 38.2, hmmpress-ed for hmmscan: gene context of repeat families (bench/art-context-run).
+	pfamA = pkgs.runCommand "pfam-a-38.2" { nativeBuildInputs = [ pkgs.gzip pkgs.hmmer ]; } ''
+		mkdir -p $out
+		gunzip -c ${pkgs.fetchurl { url = "https://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam38.2/Pfam-A.hmm.gz"; hash = "sha256-LYIIe2xcYNdizHZ/mOgmCycxNMIVq378z3RAYUpOXas="; }} > $out/Pfam-A.hmm
+		hmmpress $out/Pfam-A.hmm
+	'';
 	# Negative control: the dev genomes with each record's bases shuffled (seed 1), so no real
 	# repeat survives; every array a tool reports on them is a false positive.
 	shuffledGenomes = pkgs.runCommand "scoreboard-shuffled-genomes" { nativeBuildInputs = [ pkgs.gawk pkgs.bash ]; } ''

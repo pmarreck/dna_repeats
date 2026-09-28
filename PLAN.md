@@ -41,3 +41,19 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Label families by maximality and Pareto (length vs count) dominance.
 - [ ] Run the Windows (wine) and macOS binaries, not just build them; wire Mechatron Prime CI (mechatron-ci skill) once Peter wants CI here.
 - [ ] Repin the fork when capture-history changes; the deps hash in flake.nix must be regenerated with it.
+
+## Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)
+- [ ] CR1: README headline "fewer false ones" holds only under any-evidence-level precision; under level-4 truth dna-repeats has 5 false vs MinCED 4. Rescore independently, reword the claim, say which truth set each column uses, note time is a 30-genome sum and memory is the largest genome.
+- [ ] CR2: bench/score.awk precision sums overlaps across truth rows; take the union (failing test first: two truth rows covering the same bases).
+- [ ] CR3: README verify sample is stale (23 of 23, 4.11 s, 13 MB); paste a real 31-check run. bench/verify ART tally greps the expected column too; count rows where result equals expectation.
+- [ ] CR4: --art help and comment: bounds are spacer 60..450 (start to start 60+L..450+L), copies need 23 of 26 (0.15), seeds shorter than min_unit need 4 copies, positional spacer filter stays on.
+- [ ] CR5: one definition of "6 kb upstream" for art-check and art-link (gap from array edge to RT start codon 1..6000, strand-aware); recheck the 8 loci and the census counts.
+- [ ] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N.
+- [ ] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named.
+- [ ] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share.
+- [ ] CR9: do not install the explore tool; make the differential test exercise the production Finder pattern (CAPTURE_HISTORY, DOTALL gap, JIT) or say what it pins.
+- [ ] CR10: split the "identical spacers are not an array" test so each of its three filters has its own failing case; add inclusive-edge spacer bound tests (min_spacer, max_spacer).
+- [ ] CR11: README "12.7 times faster" is end-to-end one-thread (59.0 s to 4.65 s, before-time never logged); say so, and log a rebuilt parent timing if cheap.
+- [ ] CR12: divergence opponent rows (e69d2e8) predate plant-arrays and lack input_sha256; rerun MinCED and PILER-CR on the pinned generator and add them to bench/verify.
+- [ ] CR13: advisories: dupe-then-append leak on OOM (finder.zig:125, families.zig:77/88/201); negative named-group lookup cast (finder.zig:51); JIT NOMEMORY ignored (finder.zig:45); normalize FASTA byte classifier per byte, not bucket totals.
+- [ ] CR14 (backlog): u32 positions with a >4 GiB record guard; keep only needed family headers in callArrays (main.zig:207).

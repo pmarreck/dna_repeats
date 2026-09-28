@@ -22,10 +22,22 @@ awk -F'\t' -v list="$*" 'BEGIN {n = split(list, f, " "); for (i = 1; i <= n; i++
 [ -s "$out/members.tsv" ] || { echo "art-context-run: no members in families: $*" >&2; exit 1; }
 luajit bench/art-context ids "$out/members.tsv" "$census/genes.gff" >"$out/ids.txt" || exit 1
 awk 'FILENAME == ARGV[1] {want[$1] = 1; next} /^>/ {keep = (substr($1, 2) in want)} keep' "$out/ids.txt" "$census/proteins.faa" >"$out/proteins.faa"
-if [ -s "$out/proteins.faa" ]; then
-	hmmscan --noali --cut_ga --cpu "$threads" --tblout "$out/pfam.tbl" "$pfam" "$out/proteins.faa" >/dev/null || { echo "art-context-run: hmmscan failed" >&2; exit 1; }
-else
-	: >"$out/pfam.tbl"
-fi
+# hmmscan --cpu barely parallelizes over 25k models, so the proteins are dealt into one chunk
+# per worker, each scanned by a single-threaded hmmscan.
+scan() {
+	local i pids=() failed=0
+	awk -v n="$threads" -v p="$out/chunk" '/^>/ {k = (r++) % n} {print > (p "." k)}' "$out/proteins.faa"
+	for ((i = 0; i < threads; i++)); do
+		[ -s "$out/chunk.$i" ] || continue
+		hmmscan --noali --cut_ga --cpu 1 --tblout "$out/pfam.$i" "$pfam" "$out/chunk.$i" >/dev/null &
+		pids+=($!)
+	done
+	for i in "${pids[@]}"; do wait "$i" || failed=1; done
+	for ((i = 0; i < threads; i++)); do [ -s "$out/chunk.$i" ] && cat "$out/pfam.$i"; done >"$out/pfam.tbl"
+	for ((i = 0; i < threads; i++)); do mv "$out/chunk.$i" "$out/pfam.$i" "$HOME/.Trash/" 2>/dev/null || true; done
+	return "$failed"
+}
+: >"$out/pfam.tbl"
+[ ! -s "$out/proteins.faa" ] || scan || { echo "art-context-run: hmmscan failed" >&2; exit 1; }
 luajit bench/art-context tally "$out/members.tsv" "$census/genes.gff" "$out/pfam.tbl" >"$out/context.tsv" || exit 1
 echo "families: $#; members: $(wc -l <"$out/members.tsv"); proteins scanned: $(wc -l <"$out/ids.txt")"
