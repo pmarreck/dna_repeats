@@ -168,5 +168,7 @@ printf 'MarsHill\tATATGAATACGTATAAT\n' >"$ak/known.tsv"
 got=$(luajit bench/art-cluster "$ak/census.tsv" "$ak/known.tsv" 2>&1 | cut -f1-5 | tr '\t' ' ')
 check art-cluster "$got" "1 3 3 1 MarsHill
 2 1 1 0 -"
+luajit bench/art-cluster "$ak/census.tsv" "$ak/known.tsv" "$ak/members.tsv" >/dev/null 2>&1
+check art-cluster-members "$(cut -f1,2 "$ak/members.tsv" | sort | tr '\t\n' ': ')" "1:g1 1:g2 1:g3 2:g4 "
 
 exit "$fails"

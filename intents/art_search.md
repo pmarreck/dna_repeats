@@ -60,3 +60,12 @@ for upstream of RTs.
   LPJP1 (it names arrays only for the seven Staphylococcus phages, and only 28 of its 95
   ART RT clusters carry one), so including it was our assumption; among loci where the
   paper reports an array, 4 of 4. Generalization beyond the Staphylococcus clade is untested.
+- MGV census (189,680 human-gut viral genomes, 8.8 GB; 5.5 min on 64 workers): 26,418
+  arrays under --art, 7,240 non-coding, 2,013 upstream of a Pfam RVT_1 RT; 142 both
+  (coding fraction < 0.5, upstream), in 14 repeat families, none similar to a known ART
+  repeat. Families 1, 2, 3, 5, 6, 7 overlap DGR template or variable repeats wherever MGV
+  annotates a DGR (likely DGR-associated). Family 4: 15 arrays in 13 vOTUs of Prevotella
+  phages, repeat CAATTATCGTACTGC (4-6 copies, period ~210 nt), 3-6 kb upstream of one RT
+  lineage (91-100% identical, 422 aa, domain from residue 64); not ART (no homology to the
+  MarsHill RT, normal N-terminus), not the annotated DGR RT; partly overlaps genes (0.37-0.46).
+  Co-occurrence may be shared ancestry; RT class not yet assigned (next: myRT references).

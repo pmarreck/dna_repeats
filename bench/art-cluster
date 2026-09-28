@@ -7,7 +7,8 @@
 -- aligned. Families are ranked by members and report genomes, members whose array lies
 -- upstream of an RT, the best-matching known repeat (KNOWN.tsv: name, repeat), mean coding
 -- fraction and a representative repeat.
--- usage: bench/art-cluster CENSUS.tsv [KNOWN.tsv]
+-- usage: bench/art-cluster CENSUS.tsv [KNOWN.tsv [MEMBERS.tsv]]
+--   MEMBERS.tsv gets every census row prefixed with its family number.
 -- complexity: O(P * L^2) for P candidate pairs of repeats up to L bases.
 
 local MIN_IDENTITY = 0.8
@@ -64,11 +65,11 @@ local function split(line)
 	return f
 end
 
-local function main(census_path, known_path)
+local function main(census_path, known_path, members_path)
 	local rows = {}
 	for line in io.lines(census_path) do
 		local f = split(line)
-		rows[#rows + 1] = { rec = f[1], unit = f[6]:upper(), rel = f[8], coding = tonumber(f[11]) or 0, copies = tonumber(f[4]) }
+		rows[#rows + 1] = { rec = f[1], unit = f[6]:upper(), rel = f[8], coding = tonumber(f[11]) or 0, copies = tonumber(f[4]), line = line }
 	end
 	local known = {}
 	if known_path then
@@ -130,7 +131,9 @@ local function main(census_path, known_path)
 		if #a.members ~= #b.members then return #a.members > #b.members end
 		return a.members[1].unit < b.members[1].unit
 	end)
+	local members = members_path and assert(io.open(members_path, "w"))
 	for n, fam in ipairs(order) do
+		if members then for _, r in ipairs(fam.members) do members:write(n, "\t", r.line, "\n") end end
 		local label, best = "-", MIN_IDENTITY
 		for _, k in ipairs(known) do
 			for _, r in ipairs(fam.members) do
@@ -143,6 +146,7 @@ local function main(census_path, known_path)
 		for _, r in ipairs(fam.members) do if r.copies > rep.copies then rep = r end end
 		print(table.concat({ n, #fam.members, fam.ngenomes, fam.up, label, string.format("%.2f", fam.coding / #fam.members), rep.unit }, "\t"))
 	end
+	if members then members:close() end
 end
 
-main(assert(arg[1], "usage: art-cluster CENSUS.tsv [KNOWN.tsv]"), arg[2])
+main(assert(arg[1], "usage: art-cluster CENSUS.tsv [KNOWN.tsv [MEMBERS.tsv]]"), arg[2], arg[3])
