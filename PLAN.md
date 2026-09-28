@@ -8,13 +8,19 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 ## Now
 
 - [x] Public-readiness audit: no private data in any tracked file or commit that is not already public; symlinks are relative; the pcre2 fork is public. (done 2026-09-28 08:30 EDT)
-- [ ] Make pmarreck/dna_repeats public (Peter, 2026-09-28), with an MIT license and README credits.
+- [x] Repo public with MIT license, README credits and the tools-first framing (Peter approved wording). (done 2026-09-28 09:13 EDT)
+- [ ] ART (Peter, 2026-09-28): run on the relevant genomes and try to exceed the Anthropic ART preprint. Feasibility: MarsHill (MW248466.1) array found upstream of the RT (5 copies, 14-nt core -> 35-nt consensus) but CRISPR filters reject it (conservation 0.897, spacer 10-mer sharing 0.33); scope questions pending with Peter.
+	- [ ] ART 1: --art preset (repeat 15..49, 100..450 nt spacing, >= 3 copies, thresholds tuned on the tuning set only), TDD with synthetic ART-like arrays (context: intents/art_search.md).
+	- [ ] ART 2: pin the 8 known GenBank ART genomes in nix/benchdata.nix; score the tuning set, then the held-out set once with the preset frozen; shuffled control.
+	- [ ] ART 3: pin INPHARED (all GenBank phage genomes) and scan it; time and memory for the whole collection.
+	- [ ] ART 4: link arrays to RTs: prodigal gene calls near arrays, HMMER with an RT profile built from MarsHill RT homologs as in the paper.
+	- [ ] ART 5: census and repeat clustering (both strands) for repeats the same as or similar to ART repeats; add GPD and MGV; IMG/VR v4.1 when Peter has JGI access.
+	- [ ] ART 6: findings report and README section.
 - [x] Time split after the k-mer scan (E. coli 4.6 Mb, one thread, 138 ms): Zig prefilter 98 ms (71%), capture-history regex families ~38 ms (28%), arrays ~1 ms. The regex still finds every family. (2026-09-28 08:15 EDT)
 - [x] Easy to use and to confirm (Peter, 2026-09-28): README with SVG charts (bench/charts from the log), nix run, usage, bench/verify (22 deterministic results vs bench/expected.tsv; a planted wrong value fails it). (done 2026-09-28 08:40 EDT)
 - [ ] Auto thread count: default (all 128) is 15% slower than -j 48 on held-out #3 (589 vs 511 ms; knee near 32). Measure per phase (scan chunks vs per-length pool, which cannot use more threads than lengths) and cap accordingly.
 - [ ] Release binaries for the 5 targets (gh release).
 - [ ] Precision idea from PILER-CR: spacer length uniformity (min/max >= 0.75) and repeat conservation; validate on held-out #2.
-- [x] --sensitive (Peter, 2026-09-27): array seeds from 14 bases for degraded arrays (div 8%: 16/20 vs 12; about one extra false positive per real set). Order-independent with --crispr, a lower --min-len stays, needs --arrays/--crispr; scoreboard adapter dnarepeats_sensitive. (done 2026-09-27 23:20 EDT) Scores: held-out #3 68/73 95.9% (same as default); dev 24/25 with 26 predictions (92.3%); shuffled 0; divergence 20/20/20/19/16/8/1/0.
 - [x] Arrays report the majority consensus unit instead of one seed copy (Array.unit owned; unit_pos removed; writers no longer take the subject). Coordinates identical on dev + held-outs #1/#3; the unit changed on 28 of 169 arrays; exact match to CRISPRCasdb's DR consensus 123 -> 143 of 164 overlapping arrays (mean positional distance 1.79 -> 1.54). (done 2026-09-28 01:15 EDT)
 - [x] DR accuracy on the scoreboard: adapters emit each tool's repeat unit; score.awk scores predictions overlapping a truth array with a DR by Levenshtein distance on the closer strand (DR line: scored, exact, edit); logged as dr_scored/dr_exact/dr_edit. (done 2026-09-28 01:35 EDT) Held-out #3 exact DR / mean edit: dna-repeats 60/72 83.3% / 0.51; MinCED 51/67 76.1% / 0.72; PILER-CR 52/71 73.2% / 0.45. Dev: PILER-CR 96.6% / 0.03, dna-repeats 87.5% / 0.13, MinCED 75.0% / 0.83. CRISPRCasdb's DR comes from CRISPRCasFinder, so this is agreement with its boundary convention.
 - [x] Scoreboard: a tool failing on any genome prints its stderr and the genome, is counted (failures) and exits 1 (was: stderr discarded, crash scored as "found nothing"); rows log tool_path, input_sha256, dirty; only requested tools are built; MINCED_BIN/PILERCR_BIN/DNAREPEATS_BIN/SCOREBOARD_LOG overrides; tested with fake tools in tests/bench/run. (done 2026-09-27 23:35 EDT)
