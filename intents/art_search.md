@@ -135,3 +135,14 @@ for upstream of RTs.
   Cas12f1-like TNB domain), an IS200/IS605-family element whose ends are palindromic; most likely
   transposon-associated, not ART. Both genomes also encode multi-subunit RNA polymerase domains
   (jumbo-phage-like).
+- UG27 preprint check (bioRxiv 10.64898/2026.09.22.753630; supplement on Zenodo record
+  22903368, kept privately): its UG27 systems carry "arrays of structurally conserved yet
+  sequence-diverse ncRNAs", so they are not sequence-repeat arrays; dna-repeats --art finds no
+  array in any of its 14 construct sequences. The family 35 unit (TAAAGCCATGTGCCG) occurs within
+  2 mismatches in the constructs of 4 of its 5 UG27 systems (up to 3 exact 14-mers in one), so
+  family 35 is most likely that conserved ncRNA motif: a rediscovery. Families 65 and 15 are not
+  in the constructs (>= 4 mismatches on both strands); the constructs cover only part of each
+  locus and the preprint's full locus list is not in the supplement, so they are UG27-associated
+  repeats of unknown novelty, not claimed as new.
+- ECF-sigma lead (families 3 and 4): a literature search found nothing pairing ECF sigma factors
+  with non-coding repeat arrays in phages; still open.

@@ -7,7 +7,6 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 
 ## Now
 
-- [x] Public-readiness audit: no private data in any tracked file or commit that is not already public; symlinks are relative; the pcre2 fork is public. (done 2026-09-28 08:30 EDT)
 - [x] Repo public with MIT license, README credits and the tools-first framing (Peter approved wording). (done 2026-09-28 09:13 EDT)
 - [ ] ART (Peter, 2026-09-28): run on the relevant genomes and try to exceed the Anthropic ART preprint. Feasibility: MarsHill (MW248466.1) array found upstream of the RT (5 copies, 14-nt core -> 35-nt consensus) but CRISPR filters reject it (conservation 0.897, spacer 10-mer sharing 0.33); scope questions pending with Peter.
 	- [x] ART 1: --art preset from the paper's parameters (seeds 12, repeats 15..49, 100..450 nt spacing, conservation 0.8, spacer-sharing filter off), TDD. (done 2026-09-28 09:35 EDT, 714484a)
@@ -19,7 +18,8 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 	- [ ] ART 5b: census runs: MGV done; INPHARED done (done 2026-09-28 12:00 EDT); shuffled MGV control done (0f17fa9); GPD done (no ART-like array); IMG/VR v4.1 when Peter has JGI access.
 	- [x] ART 5c: art-cluster centroid clustering (10e8c91); art-screen with Rfam, ARAGORN and CRISPR columns (774f188, 24e2ffe). (done 2026-09-28 12:05 EDT)
 	- [x] ART 5d: gene context (art-context, art-context-run, Pfam-A 38.2) and dinucleotide control (shuffle-fasta-di); results in intents/art_search.md. (done 2026-09-28 16:20 EDT)
-	- [ ] ART 5e: read the UG27 ncRNA-array preprint (bioRxiv 2026-09-22); compare families 65, 15, 35 with its arrays; look up ECF-sigma-associated repeats (families 3, 4).
+	- [x] ART 5e: UG27 preprint compared (family 35 = its conserved ncRNA motif; 65 and 15 not in its constructs); ECF-sigma lead still open. (done 2026-09-28 16:35 EDT)
+	- [ ] ART 5f: ECF-sigma lead (families 3, 4): orientation and distance of the sigma gene to the array, host range, whether the repeats carry ECF promoter motifs (-35 AAC, -10 CGT).
 	- [ ] Long-period repeat census (Peter, 2026-09-28): units of 50..500 nt, copies up to several kb apart, across the same phage collections; cluster families and screen out known element classes (coding repeats, rRNA, insertion sequences) before calling anything novel. After the ART census.
 	- [ ] ART 6: findings report and README section.
 - [x] Easy to use and to confirm (Peter, 2026-09-28): README with SVG charts (bench/charts from the log), nix run, usage, bench/verify (22 deterministic results vs bench/expected.tsv; a planted wrong value fails it). (done 2026-09-28 08:40 EDT)
