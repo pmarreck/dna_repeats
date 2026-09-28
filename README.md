@@ -6,8 +6,8 @@ On 30 bacterial and archaeal genomes held out from all development, dna-repeats 
 more of the curated CRISPR arrays than [MinCED](https://github.com/ctSkennerton/minced)
 and [PILER-CR](https://www.drive5.com/pilercr/), got the repeat sequence exactly right more
 often, and did it 3.6 to 5.9 times faster on one core while using 1.7 to 35 times less memory.
-False predictions are about even: 3 against their 4 and 4 when any CRISPRCasdb array counts as
-true, 5 against 4 and 5 when only curated (evidence level 4) arrays do. Neither MinCED nor PILER-CR can use more than one
+It also reported fewer false ones: 1 against their 4 and 4 when any CRISPRCasdb array counts
+as true, 3 against 4 and 5 when only curated (evidence level 4) arrays do. Neither MinCED nor PILER-CR can use more than one
 thread; dna-repeats uses every core by default and scans those 30 genomes in about half a
 second, 27 to 44 times faster than either.
 
@@ -15,18 +15,25 @@ second, 27 to 44 times faster than either.
 
 | Held-out set #3 | Recall (curated) | Precision (any array) | Precision (curated) | Exact repeat | Time | Peak memory |
 |---|---|---|---|---|---|---|
-| **dna-repeats**, one thread | **68/73** | **95.9%** (71/74) | 93.2% (69/74) | **83.3%** | **4.15 s** | **14.0 MB** |
-| **dna-repeats**, 128 threads (default) | **68/73** | **95.9%** (71/74) | 93.2% (69/74) | **83.3%** | **0.56 s** | **11.0 MB** |
-| MinCED 0.4.2 (single-threaded) | 67/73 | 94.4% (67/71) | **94.4%** (67/71) | 76.1% | 15.07 s | 488.2 MB |
+| **dna-repeats**, one thread | **68/73** | **98.6%** (71/72) | **95.8%** (69/72) | **84.5%** | **4.15 s** | **14.0 MB** |
+| **dna-repeats**, 128 threads (default) | **68/73** | **98.6%** (71/72) | **95.8%** (69/72) | **84.5%** | **0.56 s** | **11.0 MB** |
+| MinCED 0.4.2 (single-threaded) | 67/73 | 94.4% (67/71) | 94.4% (67/71) | 76.1% | 15.07 s | 488.2 MB |
 | PILER-CR 1.06 (single-threaded) | 63/73 | 94.7% (71/75) | 93.3% (70/75) | 73.2% | 24.61 s | 24.3 MB |
 
 Recall counts the 73 curated (evidence level 4) CRISPRCasdb arrays. "Precision (any array)"
 counts a prediction as true when half of it lies inside any CRISPRCasdb array, including
 lower-evidence candidates; "Precision (curated)" only inside curated ones. Exact repeat is
 the share of predictions overlapping a truth array with a repeat sequence whose repeat
-matches it exactly (60/72, 51/67, 52/71). Time is wall-clock summed over the 30 genomes,
+matches it exactly (60/71, 51/67, 52/71). Time is wall-clock summed over the 30 genomes,
 from one scoreboard pass on a quiet machine (a busy machine measured 4.80 s at one thread);
-peak memory is that of the largest genome. The machine is a 64-core AMD Threadripper 3990X
+peak memory is that of the largest genome.
+
+This set was held out until its first scoring (commit 8cc9ea3: 74 predictions, 71 correct).
+A code review then found that an array seeded by a shorter exact word could end with spacers
+below the 20-base minimum after its repeat grew; enforcing the minimum on the final repeat
+(a unit-tested contract fix, not a change tuned on this set) removed two such arrays here,
+both false (spacers of 15 and 17 bases), and changed nothing else. Timing is unaffected and
+still from the earlier run. The machine is a 64-core AMD Threadripper 3990X
 (128 hardware threads). Results are identical at every thread count. More threads stop paying off past
 about 48 here: a thread sweep measured 4.19 s at 1, 616 ms at 16, 511 ms at 48 and 589 ms
 at 128 (hyperfine, 5 runs each), so `-j 48` is the fastest setting on this machine.

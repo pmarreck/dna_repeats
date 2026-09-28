@@ -122,6 +122,7 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
             .copies = copies,
             .core_len = best.core_len,
             .unit_len = unit_len,
+            .shortest_spacer = shortestSpacer(positions.items, unit_len),
             // Judged on the seed columns' spacers: consensus extension can grow a unit into
             // similar "spacers" and hide them.
             .similar = similarSpacerFraction(subject, best.copies, best.core_off, best.core_len, params.max_spacer_identity),
@@ -170,11 +171,21 @@ const Evidence = struct {
     /// Length of the exact seed the unit grew from.
     core_len: usize,
     unit_len: usize,
+    /// Fewest bases between consecutive copies of the final (extended) unit.
+    shortest_spacer: usize,
     similar: f64,
     shared: f64,
     self: f64,
     conserved: f64,
 };
+
+/// Fewest bases between consecutive copies of a unit of `unit_len` (0 when copies touch
+/// or overlap; the largest usize for fewer than two copies).
+fn shortestSpacer(positions: []const usize, unit_len: usize) usize {
+    var best: usize = std.math.maxInt(usize);
+    for (positions[0..positions.len -| 1], positions[@min(1, positions.len)..]) |a, b| best = @min(best, (b - a) -| unit_len);
+    return best;
+}
 
 /// The array filters as one pure decision (tested as a classifier over each threshold).
 fn accepted(e: Evidence, params: Params) bool {
@@ -186,6 +197,7 @@ fn accepted(e: Evidence, params: Params) bool {
         e.self <= params.max_unit_self_similarity and
         e.conserved >= params.min_repeat_conservation and
         e.unit_len >= params.min_unit and
+        e.shortest_spacer >= params.min_spacer and
         // Too long for CRISPR: consensus grew the unit well past the search cap (known
         // repeats reach ~50 bases, so allow a small margin). Consensus extension already
         // grows any unit whose copies all continue with the same base.
@@ -553,6 +565,10 @@ fn plant(buf: []u8, seed: u64, at: []const usize) []u8 {
 }
 
 fn callOn(subject: []const u8, params: Params) ![]Array {
+    return callOnCapped(subject, params, 30);
+}
+
+fn callOnCapped(subject: []const u8, params: Params, max_unit: usize) ![]Array {
     var all: std.ArrayList(fam.Family) = .empty;
     defer {
         for (all.items) |f| testing.allocator.free(f.positions);
@@ -565,7 +581,7 @@ fn callOn(subject: []const u8, params: Params) ![]Array {
         try all.appendSlice(testing.allocator, fams);
     }
     var p = params;
-    p.max_unit = 30;
+    p.max_unit = max_unit;
     return callArrays(testing.allocator, subject, all.items, p);
 }
 
@@ -608,6 +624,28 @@ test "identical spacers (a tandem repeat of unit plus spacer) are not an array" 
     const arrays = try callOn(&buf, .{});
     defer freeArrays(testing.allocator, arrays);
     try testing.expectEqual(@as(usize, 0), arrays.len);
+}
+
+/// The tandem repeat of the test above, with every other filter that could reject it
+/// switched off: shared 10-mers, the spacer minimum and the unit-length cap.
+fn tandemCalled(max_similar_spacer_fraction: f64) !usize {
+    var buf: [400]u8 = undefined;
+    fillRandom(&buf, 14);
+    const period = dr.len + 30;
+    @memcpy(buf[50..][0..dr.len], dr);
+    for (1..4) |k| @memcpy(buf[50 + k * period ..][0..period], buf[50..][0..period]);
+    const arrays = try callOnCapped(&buf, .{
+        .max_similar_spacer_fraction = max_similar_spacer_fraction,
+        .max_shared_spacer_fraction = 1.0,
+        .min_spacer = 0,
+    }, 200);
+    defer freeArrays(testing.allocator, arrays);
+    return arrays.len;
+}
+
+test "identical spacers: the positional spacer-identity filter alone rejects the tandem repeat" {
+    try testing.expectEqual(@as(usize, 1), try tandemCalled(1.0)); // control: nothing rejects it
+    try testing.expectEqual(@as(usize, 0), try tandemCalled((Params{}).max_similar_spacer_fraction));
 }
 
 test "separate arrays are reported separately, in position order" {
@@ -1019,7 +1057,7 @@ test "an array seeded only by a run shorter than min_unit needs one copy more th
 
 test "accepted: each filter classifies its metric at, below and above its threshold" {
     const p: Params = .{ .min_copies = 3, .min_unit = 23, .max_unit = 47 };
-    const ok: Evidence = .{ .copies = 5, .core_len = 30, .unit_len = 30, .similar = 0, .shared = 0, .self = 0.5, .conserved = 1 };
+    const ok: Evidence = .{ .copies = 5, .core_len = 30, .unit_len = 30, .shortest_spacer = 40, .similar = 0, .shared = 0, .self = 0.5, .conserved = 1 };
     try testing.expect(accepted(ok, p));
     const fractions = [_]f64{ 0, 0.1, 0.2, 0.3, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1 };
     for (fractions) |x| {
@@ -1043,7 +1081,13 @@ test "accepted: each filter classifies its metric at, below and above its thresh
         e = ok;
         e.copies = n;
         try testing.expectEqual(n >= 3, accepted(e, p));
+        // The final unit's spacers must respect min_spacer (a short seed can grow past it).
+        e = ok;
+        e.shortest_spacer = n;
+        try testing.expectEqual(n >= p.min_spacer, accepted(e, p));
         // A seed shorter than min_unit needs one copy more.
+        e = ok;
+        e.copies = n;
         e.core_len = 22;
         try testing.expectEqual(n >= 4, accepted(e, p));
     }
@@ -1188,4 +1232,34 @@ test "an ART-like array (conserved core and flanks, degenerate edges, long space
     const rejected = try callOn(&buf, crispr_filters);
     defer freeArrays(testing.allocator, rejected);
     try testing.expectEqual(@as(usize, 0), rejected.len);
+}
+
+test "spacer bounds are inclusive: spacers of exactly min_spacer or max_spacer make an array; one past does not" {
+    const p: Params = .{}; // min_spacer 20, max_spacer 72
+    const cases = [_]struct { spacer: usize, copies: usize }{
+        .{ .spacer = p.min_spacer, .copies = 4 },
+        .{ .spacer = p.min_spacer - 1, .copies = 0 },
+        .{ .spacer = p.max_spacer, .copies = 4 },
+        .{ .spacer = p.max_spacer + 1, .copies = 0 },
+    };
+    for (cases, 0..) |k, i| {
+        var buf: [600]u8 = undefined;
+        const step = dr.len + k.spacer;
+        const at = [_]usize{ 50, 50 + step, 50 + 2 * step, 50 + 3 * step };
+        const subject = plant(&buf, 40 + i, &at);
+        // Flanks differ in every copy, so chance agreement cannot extend the repeat (and
+        // shrink its spacers) past the planted unit.
+        for (at, 0..) |q, c| {
+            subject[q - 1] = "ACGT"[c];
+            subject[q + dr.len] = "ACGT"[c];
+        }
+        const arrays = try callOn(subject, p);
+        defer freeArrays(testing.allocator, arrays);
+        var copies: usize = 0;
+        for (arrays) |a| copies += a.copies;
+        testing.expectEqual(k.copies, copies) catch |e| {
+            std.debug.print("spacer {d}: {d} arrays\n", .{ k.spacer, arrays.len });
+            return e;
+        };
+    }
 }

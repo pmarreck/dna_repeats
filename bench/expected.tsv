@@ -15,10 +15,10 @@ div-6	dnarepeats	18	20	19	19	19	12
 div-6	dnarepeats_sensitive	19	20	20	20	20	13
 div-8	dnarepeats	12	20	14	14	14	8
 div-8	dnarepeats_sensitive	16	20	19	19	19	9
-heldout3	dnarepeats_1t	68	73	74	71	72	60
+heldout3	dnarepeats_1t	68	73	72	71	71	60
 heldout3	minced	67	73	71	67	67	51
 heldout3	pilercr	63	73	75	71	71	52
 shuffled	dnarepeats_1t	0	0	0	0	0	0
 shuffled	minced	0	0	0	0	0	0
 shuffled	pilercr	0	0	0	0	0	0
-heldout3	dnarepeats	68	73	74	71	72	60
+heldout3	dnarepeats	68	73	72	71	71	60
