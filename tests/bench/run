@@ -32,6 +32,15 @@ check no-double-count "$got" $'TOTAL\tel4=1\trecalled=0\tpredictions=2\tcorrect=
 got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tDR\n') <(printf 'C\t1\t100\nZ\t5\t50\n') | tail -1)
 check truthless-predictions-count "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=2\tcorrect=1'
 
+# Repeat (DR) accuracy: a prediction with a 4th column (its unit) that overlaps a truth array
+# with a DR is scored by Levenshtein distance to that DR on the closer strand.
+#  1-30 exact; 31-60 one substitution; 61-90 reverse complement (exact); 91-100 one deletion;
+#  Z (no truth) and a unit-less prediction are not scored.
+got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tAACGTTTG\n') <(printf 'C\t1\t30\tAACGTTTG\nC\t31\t60\tAACGATTG\nC\t61\t90\tCAAACGTT\nC\t91\t100\tAACGTTT\nZ\t1\t9\tAACGTTTG\nC\t1\t9\n') | grep '^DR')
+check dr-accuracy "$got" $'DR\tscored=4\texact=2\tedit=2'
+got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tACGT\n') <(printf 'C\t1\t50\n') | grep '^DR')
+check dr-none-without-units "$got" $'DR\tscored=0\texact=0\tedit=0'
+
 # bench/shuffle-fasta: per-record permutation (same length and base counts), deterministic by seed.
 fa=$'>r1 desc\nACGTACGTAAAACCCG\nTTTT\n>r2\nGGGGCCCCAATT\n'
 one=$(printf '%s' "$fa" | bash bench/shuffle-fasta 7)
@@ -74,7 +83,7 @@ sb="$pdir/sb"
 mkdir -p "$sb/genomes"
 printf '>g1\nACGT\n' >"$sb/genomes/g1.fa"
 printf '>g2\nACGT\n' >"$sb/genomes/g2.fa"
-printf 'g1\to\t1\t10\t1\t4\tDR\ng2\to\t1\t10\t1\t4\tDR\n' >"$sb/truth.tsv"
+printf 'g1\to\t1\t10\t1\t4\tACGT\ng2\to\t1\t10\t1\t4\tACGA\n' >"$sb/truth.tsv"
 sh=$(command -v bash)
 printf '#!%s\nprintf "%%s\\t1\\t10\\t3\\t4\\tACGT\\t1\\n" "$(basename "${@: -1}" .fa)"\n' "$sh" >"$sb/good"
 printf '#!%s\ncase "$*" in *g2.fa*) echo "boom" >&2; exit 3 ;; esac\nprintf "g1\\t1\\t10\\t3\\t4\\tACGT\\t1\\n"\n' "$sh" >"$sb/bad"
@@ -83,6 +92,7 @@ sbrun() { DNAREPEATS_BIN="$sb/$1" SCOREBOARD_LOG="$sb/log" bash bench/scoreboard
 sbrun good
 check scoreboard-good-exit "$?" 0
 check scoreboard-good-recall "$(jq -r '"\(.recalled)/\(.el4) \(.failures)"' "$sb/log")" "2/2 0"
+check scoreboard-dr-accuracy "$(jq -r '"\(.dr_scored) \(.dr_exact) \(.dr_edit)"' "$sb/log")" "2 1 1"
 check scoreboard-tool-path "$(jq -r .tool_path "$sb/log")" "$sb/good"
 check scoreboard-input-checksum "$(jq -r .input_sha256 "$sb/log" | grep -cE '^[0-9a-f]{64}$')" 1
 check scoreboard-good-quiet "$(cat "$sb/err")" ""

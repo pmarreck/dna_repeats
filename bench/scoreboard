@@ -45,23 +45,24 @@ if needs pilercr && [ -z "$pilercr" ]; then p=$(build pilercr) || exit 1; pilerc
 if needs dnarepeats && [ -z "$dnarepeats" ]; then p=$(build default) || exit 1; dnarepeats=$p/bin/dna-repeats; fi
 readonly TIME=$(type -P gtime || type -P time) || { echo 'GNU time (gtime/time) not found' >&2; exit 1; }
 
-# Each adapter: $1 = FASTA path; prints "accession<TAB>start<TAB>end" (1-based, inclusive).
-predict_minced() { "$minced" -gff "$1" | awk -F'\t' '$3 == "repeat_region" {print $1 "\t" $4 "\t" $5}'; }
+# Each adapter: $1 = FASTA path; prints "accession<TAB>start<TAB>end<TAB>repeat unit"
+# (1-based, inclusive).
+predict_minced() { "$minced" -gff "$1" | awk -F'\t' '$3 == "repeat_region" {u = $9; sub(/.*rpt_unit_seq=/, "", u); sub(/;.*/, "", u); print $1 "\t" $4 "\t" $5 "\t" u}'; }
 predict_pilercr() {
 	"$pilercr" -in "$1" -out "$work/pilercr.txt" -quiet >/dev/null || return
 	# SUMMARY BY POSITION rows are fixed-width: position at column 26, length at column 38.
 	awk '/^SUMMARY BY POSITION/ {on = 1; next}
 		on && /^>/ {acc = substr($1, 2); next}
-		on && /^ *[0-9]+  / {pos = substr($0, 26, 10) + 0; len = substr($0, 38, 10) + 0; print acc "\t" pos "\t" pos + len - 1}' "$work/pilercr.txt"
+		on && /^ *[0-9]+  / {pos = substr($0, 26, 10) + 0; len = substr($0, 38, 10) + 0; print acc "\t" pos "\t" pos + len - 1 "\t" $NF}' "$work/pilercr.txt"
 }
 # Array calling with the CRISPR preset.
-predict_dnarepeats() { "$dnarepeats" --no-progress --crispr "$1" | awk -F'\t' '{print $1 "\t" $2 "\t" $3}'; }
+predict_dnarepeats() { "$dnarepeats" --no-progress --crispr "$1" | awk -F'\t' '{print $1 "\t" $2 "\t" $3 "\t" $6}'; }
 # The --sensitive preset: seeds from 14 bases for degraded arrays.
-predict_dnarepeats_sensitive() { "$dnarepeats" --no-progress --crispr --sensitive "$1" | awk -F'\t' '{print $1 "\t" $2 "\t" $3}'; }
+predict_dnarepeats_sensitive() { "$dnarepeats" --no-progress --crispr --sensitive "$1" | awk -F'\t' '{print $1 "\t" $2 "\t" $3 "\t" $6}'; }
 # Naive baseline: every family of >= 3 exact copies is one region (step 3 replaces this).
 predict_dnarepeats_raw() {
 	"$dnarepeats" --no-progress --min-len 23 --max-len 47 --max-gap 72 "$1" |
-		awk -F'\t' '$3 >= 3 {n = split($5, p, ","); print $1 "\t" p[1] + 1 "\t" p[n] + $2}'
+		awk -F'\t' '$3 >= 3 {n = split($5, p, ","); print $1 "\t" p[1] + 1 "\t" p[n] + $2 "\t" $4}'
 }
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/scoreboard.XXXXXX") || exit 1
@@ -79,7 +80,7 @@ status=0
 when=$(date -Iseconds)
 
 printf 'set: %s\n' "$set"
-printf '%-16s %9s %8s %9s %9s %9s %10s\n' tool recalled recall predicted precision wall_s peak_MB
+printf '%-16s %9s %8s %9s %9s %9s %10s %10s\n' tool recalled recall predicted precision wall_s peak_MB DR_exact
 for tool in "${tools[@]}"; do
 	: >"$work/$tool.pred"
 	wall=0 peak=0 failures=0
@@ -97,17 +98,22 @@ for tool in "${tools[@]}"; do
 		[ "$kb" -gt "$peak" ] && peak=$kb
 	done
 	[ "$failures" -eq 0 ] || status=1
-	score=$(awk -f bench/score.awk "$truth" "$work/$tool.pred" | tail -1)
+	awk -f bench/score.awk "$truth" "$work/$tool.pred" >"$work/score"
+	score=$(tail -1 "$work/score")
+	dr=$(grep '^DR' "$work/score")
+	drn=$(sed 's/.*scored=\([0-9]*\).*/\1/' <<<"$dr"); drx=$(sed 's/.*exact=\([0-9]*\).*/\1/' <<<"$dr"); dre=$(sed 's/.*edit=\([0-9]*\).*/\1/' <<<"$dr")
 	el4=$(sed 's/.*el4=\([0-9]*\).*/\1/' <<<"$score"); rec=$(sed 's/.*recalled=\([0-9]*\).*/\1/' <<<"$score")
 	pred=$(sed 's/.*predictions=\([0-9]*\).*/\1/' <<<"$score"); cor=$(sed 's/.*correct=\([0-9]*\).*/\1/' <<<"$score")
-	printf '%-16s %5d/%-3d %7.1f%% %9d %8.1f%% %9.2f %10.1f%s\n' "$tool" "$rec" "$el4" \
+	printf '%-16s %5d/%-3d %7.1f%% %9d %8.1f%% %9.2f %10.1f %9.1f%%%s\n' "$tool" "$rec" "$el4" \
 		"$(awk -v a="$rec" -v b="$el4" 'BEGIN {print b ? 100 * a / b : 0}')" "$pred" \
 		"$(awk -v a="$cor" -v b="$pred" 'BEGIN {print b ? 100 * a / b : 0}')" "$wall" "$(awk -v k="$peak" 'BEGIN {print k / 1024}')" \
+		"$(awk -v a="$drx" -v b="$drn" 'BEGIN {print b ? 100 * a / b : 0}')" \
 		"$([ "$failures" -eq 0 ] || printf '  FAILED on %d genomes' "$failures")"
 	jq -cn --arg commit "$commit" --argjson dirty "$dirty" --arg when "$when" --arg machine "$machine" --arg set "$set" \
 		--arg tool "$tool" --arg tool_path "$tool_path" --arg input_sha256 "$input_sha256" \
 		--argjson el4 "$el4" --argjson recalled "$rec" --argjson predictions "$pred" --argjson correct "$cor" \
 		--argjson wall_s "$wall" --argjson peak_kb "$peak" --argjson failures "$failures" \
-		'{commit: $commit, dirty: $dirty, when: $when, machine: $machine, set: $set, tool: $tool, tool_path: $tool_path, input_sha256: $input_sha256, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, wall_s: $wall_s, peak_kb: $peak_kb, failures: $failures}' >>"$log"
+		--argjson dr_scored "$drn" --argjson dr_exact "$drx" --argjson dr_edit "$dre" \
+		'{commit: $commit, dirty: $dirty, when: $when, machine: $machine, set: $set, tool: $tool, tool_path: $tool_path, input_sha256: $input_sha256, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, wall_s: $wall_s, peak_kb: $peak_kb, failures: $failures, dr_scored: $dr_scored, dr_exact: $dr_exact, dr_edit: $dr_edit}' >>"$log"
 done
 exit "$status"
