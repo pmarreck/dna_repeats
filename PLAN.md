@@ -43,7 +43,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [x] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N. (done 2026-09-28 16:52 EDT)
 - [x] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named. (done 2026-09-28 17:22 EDT)
 - [ ] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share.
-- [ ] CR9: (explore no longer installed, 9db1715) make the differential test exercise the production Finder pattern (CAPTURE_HISTORY, DOTALL gap, JIT) or say what it pins.
+- [x] CR9: (explore no longer installed, 9db1715) make the differential test exercise the production Finder pattern (CAPTURE_HISTORY, DOTALL gap, JIT) or say what it pins. (done 2026-09-28 19:05 EDT)
 - [x] CR10: split the "identical spacers are not an array" test so each of its three filters has its own failing case; add inclusive-edge spacer bound tests (min_spacer, max_spacer). (done 2026-09-28 18:40 EDT, f348b1b; found and fixed the min_spacer contract bug)
 - [x] CR11: README "12.7 times faster" is end-to-end one-thread (59.0 s to 4.65 s, before-time never logged); say so, and log a rebuilt parent timing if cheap. (done 2026-09-28 16:37 EDT)
 - [ ] CR10b: on a quiet machine, log held-out #3 scoreboard rows for the f348b1b caller and regenerate docs/img charts; rerun the ART censuses (MGV, INPHARED, GPD) with it and update intents/art_search.md counts.

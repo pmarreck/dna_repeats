@@ -153,7 +153,9 @@ fn chain(gpa: Allocator, occ: []const usize, start: usize, len: usize, max_gap: 
 }
 
 /// The chain the fixed-L regex reports when anchored at `start` (unit then hits), or just [start].
+/// A unit containing a non-base (N) matches nothing, as the regex's [ACGT] unit class requires.
 pub fn chainAt(gpa: Allocator, subject: []const u8, len: usize, max_gap: usize, start: usize) ![]usize {
+    if (!isBases(subject[start..][0..len])) return gpa.alloc(usize, 0);
     const occ = try occurrences(gpa, subject, len, firstOccurrence(subject, len, start));
     defer gpa.free(occ);
     return chain(gpa, occ, start, len, max_gap);
