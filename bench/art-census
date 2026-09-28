@@ -6,6 +6,7 @@
 # the coding fraction, and myRT class models for the RT class. Writes OUTDIR/{arrays.tsv,
 # windows.fa,genes.gff,proteins.faa,hits.tbl,classes.tsv,census.tsv,times.tsv} and prints a summary.
 # usage: bench/art-census GENOMES.fa[.gz] OUTDIR [-j THREADS]
+#   env DNAREPEATS_BIN, PFAM_RVT1_HMM and MYRT_HMM use those instead of the pinned builds.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 [ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
@@ -17,8 +18,10 @@ readonly WINDOW=8000
 mkdir -p "$out" || exit 1
 bin=${DNAREPEATS_BIN:-}
 [ -n "$bin" ] || { p=$(nix build .#default --no-link --print-out-paths) || exit 1; bin=$p/bin/dna-repeats; }
-hmm=$(nix build .#pfamRvt1 --no-link --print-out-paths) || exit 1
-myrt=$(nix eval --raw .#myrtHmm) && nix build --no-link "${myrt%%/Models/*}" || exit 1
+hmm=${PFAM_RVT1_HMM:-}
+[ -n "$hmm" ] || hmm=$(nix build .#pfamRvt1 --no-link --print-out-paths) || exit 1
+myrt=${MYRT_HMM:-}
+[ -n "$myrt" ] || { myrt=$(nix eval --raw .#myrtHmm) && nix build --no-link "${myrt%%/Models/*}"; } || exit 1
 cat_input() { case $input in *.gz) gzip -dc "$input" ;; *) cat "$input" ;; esac; }
 : >"$out/times.tsv"
 step() { # step NAME CMD...: run, record wall seconds, fail loudly
@@ -32,8 +35,9 @@ step() { # step NAME CMD...: run, record wall seconds, fail loudly
 
 # Records are dealt round-robin to one single-threaded dna-repeats per worker through FIFOs:
 # phage collections are many small records, which threads within one record cannot split.
+# Every output is opened even with fewer records than N, so no FIFO reader waits forever.
 deal() { # deal N PREFIX: FASTA on stdin -> PREFIX.0 .. PREFIX.N-1, whole records round-robin
-	awk -v n="$1" -v p="$2" '/^>/ {k = (r++) % n} {print > (p "." k)}'
+	awk -v n="$1" -v p="$2" 'BEGIN {for (k = 0; k < n; k++) printf "" > (p "." k)} /^>/ {k = (r++) % n} {print > (p "." k)}'
 }
 arrays() {
 	local i pids=()
@@ -84,6 +88,8 @@ hits() { hmmsearch --noali --cpu "$threads" -E 1e-5 --tblout "$out/hits.tbl" "$h
 classify() {
 	grep -v '^#' "$out/hits.tbl" | awk '{print $1}' | sort -u >"$out/rt.ids"
 	awk 'FILENAME == ARGV[1] {want[$1] = 1; next} /^>/ {keep = (substr($1, 2) in want)} keep' "$out/rt.ids" "$out/proteins.faa" >"$out/rt.faa"
+	# No RT at all (e.g. a shuffled control): nothing to classify, and hmmscan rejects empty input.
+	[ -s "$out/rt.faa" ] || { : >"$out/rt_classes.tbl"; : >"$out/classes.tsv"; return 0; }
 	hmmscan --noali --cpu "$threads" --tblout "$out/rt_classes.tbl" "$myrt" "$out/rt.faa" >/dev/null || return 1
 	awk '!/^#/ && !($3 in seen) {seen[$3] = 1; print $3 "\t" $1}' "$out/rt_classes.tbl" >"$out/classes.tsv"
 }
