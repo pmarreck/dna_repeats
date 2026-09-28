@@ -40,6 +40,11 @@ t=help
 capture "$bin" --help
 expect_rc $t 0 && expect_has $t "$out" "Usage: dna-repeats" && expect_eq $t "$err" "" && pass $t
 
+t=help-art-bounds
+# The --art bounds are on the spacer (the gap between copies), not start to start.
+capture "$bin" --help
+expect_rc $t 0 && expect_has $t "$out" "spacers 60..450 nt" && pass $t
+
 t=short-help
 capture "$bin" -h
 expect_rc $t 0 && expect_has $t "$out" "--about" && pass $t

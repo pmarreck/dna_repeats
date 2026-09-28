@@ -19,7 +19,7 @@ pub const usage =
     \\  --min-unit N         shortest array repeat after extension (default 0)
     \\  --crispr             CRISPR preset: --arrays, repeats 23..47 (seeds from 18), spacers 26..64
     \\  --sensitive          array seeds from 14 bases: finds more degraded arrays, a few more false ones
-    \\  --art                ART preset: arrays of 15..49 nt repeats 100..450 nt apart (Yoon et al. 2026)
+    \\  --art                ART preset: arrays of 15..49 nt repeats with spacers 60..450 nt (Yoon et al. 2026)
     \\  -j, --threads N      worker threads (default: one per CPU)
     \\  -o, --output PATH    write results to PATH ('-' or @stdout: stdout; @stderr: stderr)
     \\  --progress           always show progress on stderr
@@ -143,10 +143,14 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
             cfg.max_shared_spacer_fraction = 0.2;
         } else if (eql(a, "--art")) {
             // Array-associated reverse transcriptase arrays (Yoon et al. 2026): repeats of
-            // 15..49 nt with a conserved core and looser edges, copies 100..450 nt apart
-            // start to start, at least 3 copies; seeds from their exact 12-nt word rule.
-            // Copies need >= 21 of 26 bases to match (their copy criterion); spacers carry
-            // conserved repeat flanks, so the shared-sequence spacer filter is off.
+            // 15..49 nt with a conserved core and looser edges, at least 3 copies, seeded
+            // from exact words of 12+ nt. The bounds are on the spacer (the gap between
+            // copies), 60..450 nt, so copies are 60+L..450+L apart start to start for a unit
+            // of L nt; CRISPR arrays (copies ~67 nt apart) are therefore seen at double
+            // period. Copies may differ in up to 15% of bases (the array caller's default;
+            // 23 of 26 match), and a seed shorter than min_unit needs one more copy (4).
+            // Spacers carry conserved repeat flanks, so the shared-sequence spacer filter
+            // is off; the positional spacer-identity filter stays on.
             cfg.arrays = true;
             cfg.min_len = 12;
             cfg.max_len = 49;
