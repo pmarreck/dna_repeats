@@ -111,3 +111,7 @@ for upstream of RTs.
   54-94% inside predicted genes. One lead: uvig_591988 and uvig_579515 share a 27-nt repeat with a
   near-palindromic core (TGAGCCTTTTAACGTCATGCTCAGGAC, 4 copies, ~5 kb upstream, coding 0.59);
   unverified (the coding call may be Prodigal over-calling), not a finding.
+- Dinucleotide control (bench/shuffle-fasta-di, commit b7b879a): the same 10% MGV sample with
+  every record shuffled preserving exact dinucleotide counts gives 8 arrays (vs 2,633 real, 3
+  mononucleotide-shuffled), all 15-16-nt low-complexity units with 3-4 copies, and 0
+  RT-upstream: about 0.3% of the sample's array calls are expected under this null.
