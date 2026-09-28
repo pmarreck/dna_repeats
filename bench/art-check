@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ART locus check (intents/art_search.md): for each locus in the table, run dna-repeats --art
-# on its genome and report whether a called array overlaps the 6 kb upstream of the RT
-# (strand-aware: below the RT start on +, above it on -), as in the paper's window.
+# on its genome and report whether a called array lies upstream of the RT by the rule
+# bench/art-link uses for the census: the gap from the array's near edge to the RT start
+# codon, on the RT's strand, is 1..6000 (an array touching or crossing the codon is not).
 # Prints: accession, found|none, phage, set, expected, overlapping arrays (start-end copies unit).
 # usage: bench/art-check [--genomes DIR] [--loci FILE]   (defaults: the pinned art genomes, bench/art_loci.tsv)
 #   env DNAREPEATS_BIN uses that binary instead of building it.
@@ -23,7 +24,7 @@ readonly UPSTREAM=6000
 grep -v '^#' "$loci" | while IFS=$'\t' read -r acc phage set strand start _ expected; do
 	"$bin" --no-progress --art "$genomes/$acc.fa" 2>/dev/null |
 		awk -F'\t' -v OFS='\t' -v acc="$acc" -v phage="$phage" -v set="$set" -v st="$strand" -v rt="$start" -v up="$UPSTREAM" -v want="$expected" '
-			{ lo = st == "+" ? rt - up : rt; hi = st == "+" ? rt : rt + up
-			  if ($3 >= lo && $2 <= hi) hits = hits (hits ? " " : "") $2 "-" $3 " x" $4 " " $6 }
+			{ d = st == "+" ? rt - $3 : $2 - rt
+			  if (d >= 1 && d <= up) hits = hits (hits ? " " : "") $2 "-" $3 " x" $4 " " $6 }
 			END { print acc, hits ? "found" : "none", phage, set, want, hits }'
 done

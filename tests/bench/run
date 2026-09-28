@@ -109,13 +109,15 @@ check scoreboard-bad-failures "$(tail -1 "$sb/log" | jq -r .failures)" 1
 check scoreboard-bad-names-genome "$(grep -c 'g2.fa' "$sb/err")" 1
 check scoreboard-bad-shows-tool-stderr "$(grep -c boom "$sb/err")" 1
 
-# bench/art-check classifies each locus by whether an --art array overlaps the 6 kb upstream
-# of its RT (strand-aware), as a classifier over arrays placed around both window edges.
+# bench/art-check classifies each locus by whether an --art array lies upstream of its RT with
+# the rule bench/art-link uses: the gap from the array's near edge to the RT start codon, on the
+# RT's strand, is 1..6000 (an array touching or crossing the start codon is not upstream).
+# A classifier over arrays placed at both edges of the gap on both strands.
 ac="$pdir/ac"
 mkdir -p "$ac/genomes" "$ac/rows"
 printf '# accession\tphage\tset\trt_strand\trt_start\tpaper_reports_array\texpected\n' >"$ac/loci.tsv"
 i=0
-# plus strand, RT at 10000: window [4000, 10000]; minus strand, RT at 10000: window [10000, 16000]
+# RT start codon at 10000. Plus strand: gap = 10000 - end; minus strand: gap = start - 10000.
 while read -r strand start end want; do
 	i=$((i + 1))
 	printf '>g%d\nACGT\n' "$i" >"$ac/genomes/g$i.fa"
@@ -123,18 +125,22 @@ while read -r strand start end want; do
 	printf 'g%d\tp%d\tt\t%s\t10000\tyes\t%s\n' "$i" "$i" "$strand" "$want" >>"$ac/loci.tsv"
 done <<'CASES'
 + 3000 3999 none
-+ 3990 4500 found
-+ 9990 10400 found
++ 3000 4000 found
++ 9000 9999 found
++ 9000 10000 none
++ 9990 10400 none
 + 10001 10500 none
 - 16001 16500 none
-- 15990 16500 found
-- 9500 10000 found
+- 16000 16500 found
+- 10001 10500 found
+- 10000 10500 none
+- 9500 10000 none
 - 9000 9999 none
 CASES
 printf '#!%s\ncat "%s/rows/$(basename "${@: -1}" .fa).tsv"\n' "$sh" "$ac" >"$ac/fake"
 chmod +x "$ac/fake"
 got=$(DNAREPEATS_BIN="$ac/fake" bash bench/art-check --genomes "$ac/genomes" --loci "$ac/loci.tsv" 2>"$ac/err" | awk -F'\t' '{print $1 "=" $2}' | tr '\n' ' ')
-check art-check-windows "$got" "g1=none g2=found g3=found g4=none g5=none g6=found g7=found g8=none "
+check art-check-windows "$got" "g1=none g2=found g3=found g4=none g5=none g6=none g7=none g8=found g9=found g10=none g11=none g12=none "
 check art-check-quiet "$(cat "$ac/err")" ""
 
 # bench/art-link joins --art arrays with prodigal genes and PF00078 hits cut from windows
