@@ -6,16 +6,23 @@ On 30 bacterial and archaeal genomes held out from all development, dna-repeats 
 more of the curated CRISPR arrays than [MinCED](https://github.com/ctSkennerton/minced)
 and [PILER-CR](https://www.drive5.com/pilercr/), reported fewer false ones, got the
 repeat sequence exactly right more often, and did it 3.6 to 5.9 times faster on one core
-while using 1.7 to 33 times less memory. With all cores it scans those 30 genomes in about
-half a second.
+while using 1.7 to 35 times less memory. Neither MinCED nor PILER-CR can use more than one
+thread; dna-repeats uses every core by default and scans those 30 genomes in about half a
+second, 27 to 44 times faster than either.
 
 ![Held-out set #3: recall, precision, exact repeat sequence, time on one core and peak memory for dna-repeats, MinCED and PILER-CR](docs/img/heldout3.svg)
 
-| Held-out set #3, one thread | Recall | Precision | Exact repeat | Time | Peak memory |
+| Held-out set #3 | Recall | Precision | Exact repeat | Time | Peak memory |
 |---|---|---|---|---|---|
-| **dna-repeats** | **68/73** | **95.9%** | **83.3%** | **4.13 s** | **14.0 MB** |
-| MinCED 0.4.2 | 67/73 | 94.4% | 76.1% | 14.74 s | 461.2 MB |
-| PILER-CR 1.06 | 63/73 | 94.7% | 73.2% | 24.23 s | 24.0 MB |
+| **dna-repeats**, one thread | **68/73** | **95.9%** | **83.3%** | **4.15 s** | **14.0 MB** |
+| **dna-repeats**, 128 threads (default) | **68/73** | **95.9%** | **83.3%** | **0.56 s** | **11.0 MB** |
+| MinCED 0.4.2 (single-threaded) | 67/73 | 94.4% | 76.1% | 15.07 s | 488.2 MB |
+| PILER-CR 1.06 (single-threaded) | 63/73 | 94.7% | 73.2% | 24.61 s | 24.3 MB |
+
+Times are wall-clock for all 30 genomes on a 64-core AMD Threadripper 3990X (128 hardware
+threads). Results are identical at every thread count. More threads stop paying off past
+about 48 here: a thread sweep measured 4.19 s at 1, 616 ms at 16, 511 ms at 48 and 589 ms
+at 128 (hyperfine, 5 runs each), so `-j 48` is the fastest setting on this machine.
 
 Arrays in old or decaying CRISPR loci carry mutated repeat copies. On synthetic arrays
 whose every repeat copy was mutated at a fixed rate, dna-repeats finds as many as or more
@@ -82,8 +89,9 @@ bench/verify
 ```
 
 ```
-One thread on held-out #3: dna-repeats 4.12 s, 14 MB; 3.7x faster than MinCED, 5.7x faster than PILER-CR; ...
-VERIFIED: 22 of 22 expected results reproduced exactly.
+One thread on held-out #3: dna-repeats 4.11 s, 13 MB; 3.6x faster than MinCED, 5.8x faster than PILER-CR; ...
+All 128 CPUs: dna-repeats 0.54 s, 27x faster than MinCED, 44x faster than PILER-CR.
+VERIFIED: 23 of 23 expected results reproduced exactly.
 ```
 
 It reruns held-out set #3, a negative control (the development genomes with their bases
