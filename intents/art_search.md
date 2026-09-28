@@ -84,3 +84,24 @@ for upstream of RTs.
   recur across many vOTUs with no RT (e.g. 301 arrays in 58 vOTUs, 37-nt repeat, period ~150);
   they need screening against known element classes (terminators, REP/BIME-like, Rfam) before
   any is called new.
+- art-cluster now uses greedy centroid clustering (commit 10e8c91): MGV's 7,240 non-coding
+  arrays form 834 families, the largest 585 arrays in 28 vOTUs; the 3,898-array chain is gone.
+- Known-element screen (bench/art-screen, commit 24e2ffe): each family's representative array
+  against Rfam 15.0 (Infernal 1.1.5 cmscan, gathering thresholds), ARAGORN tRNA/tmRNA, and
+  dna-repeats --crispr. Of 834 families: 38 known RNA (mostly tRNA arrays, e.g. 392 arrays in
+  116 vOTUs), 67 CRISPR (MinCED 0.4.2 agrees on 59 of the 69 it and we flag), 729 unexplained.
+  The ART preset sees CRISPR arrays at double period: copies ~67 nt apart violate the 60-nt
+  minimum spacer, so it chains every second repeat. The earlier "301 arrays in 58 vOTUs, 37-nt
+  repeat" family is such a phage-encoded CRISPR array (36-nt repeat, 29-30-nt spacers).
+  Unexplained families spread over at most 34 vOTUs; the top ones (e.g. GTGTGTCCAATTATT, 42
+  arrays in 34 vOTUs) are candidates, not findings, until their gene context is checked.
+- INPHARED 14Apr2025 census (34,062 phage genomes, 2.1 Gb; 2 min on 64 workers): 9,274
+  arrays, 2,389 non-coding. The retron-class (ART-like) arrays upstream of an RT are exactly the
+  paper's 7 Staphylococcus phage loci plus our LPJP1 locus (MZ422438:181312-181985); no other
+  phage in INPHARED carries one. Also 1 non-coding array upstream of a UG2-class RT (CP103976).
+  Array-first search over all isolated phages recovers the paper's RT-first result with no
+  additional retron-class hits.
+- Shuffled control (commit 0f17fa9 fixed two census bugs it exposed): a 10% MGV sample (18,968
+  records, every 10th) gives 2,633 arrays and 234 RT-upstream; the same records shuffled
+  (mononucleotide, per-record seeds) give 3 arrays, all minimal (3 copies of 15-nt AT-rich
+  units), and 0 RT-upstream.

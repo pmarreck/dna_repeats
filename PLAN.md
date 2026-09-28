@@ -16,8 +16,9 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 	- [ ] ART 3: pin INPHARED (all GenBank phage genomes) and scan it; time and memory for the whole collection.
 	- [x] ART 4: bench/art-census (dna-repeats --art, prodigal on ±8 kb windows, Pfam RVT_1 hmmsearch, bench/art-link tested on fixtures). On the 8 known genomes: all 8 have an array upstream of an RT, including LPJP1's second RT (array 518 bp upstream, 4 copies, 35 nt), which the RT-first held-out check missed; under 1 s total. (done 2026-09-28 10:25 EDT)
 	- [x] ART 5a: bench/art-cluster (repeat families on both strands, containment identity >= 0.8, labeled with bench/art_known.tsv); tested, 2 mutants killed. (done 2026-09-28 10:15 EDT)
-	- [ ] ART 5b: census runs: INPHARED 14Apr2025 (0.64 GB gz), GPD (1.55 GB gz), MGV v1.0 (8.8 GB) downloading to ~/Documents/dna_repeats_output/art (private, not committed); shuffled-genome control; IMG/VR v4.1 when Peter has JGI access.
-	- [ ] ART 5c: art-cluster without single-linkage chaining (centroid or complete linkage), test first; then screen recurring non-coding families against Rfam and known repeat classes.
+	- [ ] ART 5b: census runs: MGV done; INPHARED done (done 2026-09-28 12:00 EDT); shuffled MGV control done (0f17fa9); GPD downloading (1.35 of 1.55 GB); IMG/VR v4.1 when Peter has JGI access.
+	- [x] ART 5c: art-cluster centroid clustering (10e8c91); art-screen with Rfam, ARAGORN and CRISPR columns (774f188, 24e2ffe). (done 2026-09-28 12:05 EDT)
+	- [ ] ART 5d: gene context of the top unexplained families (Pfam-A hmmscan of flanking proteins), then a dinucleotide-shuffle control.
 	- [ ] Long-period repeat census (Peter, 2026-09-28): units of 50..500 nt, copies up to several kb apart, across the same phage collections; cluster families and screen out known element classes (coding repeats, rRNA, insertion sequences) before calling anything novel. After the ART census.
 	- [ ] ART 6: findings report and README section.
 - [x] Time split after the k-mer scan (E. coli 4.6 Mb, one thread, 138 ms): Zig prefilter 98 ms (71%), capture-history regex families ~38 ms (28%), arrays ~1 ms. The regex still finds every family. (2026-09-28 08:15 EDT)
@@ -34,7 +35,6 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Pure-Zig family finder: measure against the capture-history regex now that the prefilter is Zig (regex families are 28% of one-thread time on E. coli).
 - [ ] Exploratory, measure + TDD: 2-bit base packing (32 bases per u64) for unit equality and popcount Hamming in seed extension.
 - [ ] Exploratory, measure + TDD: SIMD (@Vector) window search for unit copies in extension and scan; compare against scalar and PCRE2 JIT.
-- [x] Final report (Peter, 2026-09-26): published as a public artifact, https://claude.ai/artifact/YDA9CSb9S3wHVikR2ge4Te (held-out #3 five-axis small multiples, divergence curves, all sets, method, limits, reproduction). Keep it updated as results change. (done 2026-09-28 02:30 EDT)
 - [ ] Best-in-class biotech CLI: standard outputs (GFF3, BED, FASTA of spacers) and packaging (static binaries; consider Bioconda).
 - [ ] Show Peter the rendered progress bar (Unicode and --ascii) and encode the approved look as exact assertions.
 - [ ] CLI follow-ups: JSON metadata (stats) on stderr; Windows /o-style aliases.
