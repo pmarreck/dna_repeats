@@ -1,6 +1,7 @@
 #!/usr/bin/env luajit
 -- Repeat families across an ART census (bench/art-census census.tsv): arrays whose consensus
--- repeats are similar on either strand are joined into one family (single linkage).
+-- repeats are similar on either strand form one family: greedy centroid clustering, most
+-- copies first, so every member is similar to its family's centroid (no single-linkage chains).
 -- Similarity is containment identity: the shorter repeat aligned inside the longer (free end
 -- gaps in the longer), (shorter length - edits) / shorter length, joined at >= MIN_IDENTITY.
 -- Candidate pairs share a canonical 8-mer (an inverted index), so unrelated repeats are never
@@ -78,40 +79,46 @@ local function main(census_path, known_path, members_path)
 			if f[1] ~= "" and f[1]:sub(1, 1) ~= "#" then known[#known + 1] = { name = f[1], unit = f[2]:upper() } end
 		end
 	end
-	-- Union-find over rows.
-	local parent = {}
-	for i = 1, #rows do parent[i] = i end
-	local function find(i)
-		while parent[i] ~= i do parent[i] = parent[parent[i]]; i = parent[i] end
-		return i
-	end
-	-- Inverted index: canonical 8-mer -> rows; identical repeats are compared once.
-	local index, seen_unit = {}, {}
-	for i, r in ipairs(rows) do
-		local first = seen_unit[r.unit]
-		if first then
-			parent[find(i)] = find(first)
-		else
-			seen_unit[r.unit] = i
-			for w in pairs(kmers(r.unit)) do
-				index[w] = index[w] or {}
-				table.insert(index[w], i)
-			end
-		end
-	end
-	local tried = {}
-	for _, list in pairs(index) do
-		for x = 1, #list do
-			for y = x + 1, #list do
-				local i, j = list[x], list[y]
-				local key = i * 1000003 + j
-				if not tried[key] and find(i) ~= find(j) then
-					tried[key] = true
-					if identity(rows[i].unit, rows[j].unit) >= MIN_IDENTITY then parent[find(i)] = find(j) end
+	-- Greedy centroid clustering (no chaining): rows in order of copies (most first) join the
+	-- first centroid whose repeat is similar to their own; otherwise they found a family.
+	-- Only centroids are indexed, so a family never grows through a chain of members.
+	local order_rows = {}
+	for i = 1, #rows do order_rows[i] = i end
+	table.sort(order_rows, function(a, b)
+		if rows[a].copies ~= rows[b].copies then return rows[a].copies > rows[b].copies end
+		if rows[a].unit ~= rows[b].unit then return rows[a].unit < rows[b].unit end
+		return a < b
+	end)
+	local centroid_of, by_unit, index, ncentroids = {}, {}, {}, 0
+	for _, i in ipairs(order_rows) do
+		local u = rows[i].unit
+		local c = by_unit[u]
+		if not c then
+			local ks, best = kmers(u), nil
+			local tried = {}
+			for w in pairs(ks) do
+				for _, cand in ipairs(index[w] or {}) do
+					if not tried[cand] and (not best or cand < best) then
+						tried[cand] = true
+						if identity(rows[cand].unit, u) >= MIN_IDENTITY then best = cand end
+					end
 				end
 			end
+			if best then
+				c = best
+			else
+				c = i
+				ncentroids = ncentroids + 1
+				for w in pairs(ks) do
+					index[w] = index[w] or {}
+					table.insert(index[w], i)
+				end
+			end
+			by_unit[u] = c
 		end
+		centroid_of[i] = c
 	end
+	local function find(i) return centroid_of[i] end
 	-- Families.
 	local fams, order = {}, {}
 	for i, r in ipairs(rows) do
