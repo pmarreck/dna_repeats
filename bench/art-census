@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# ART census (intents/art_search.md): every --art array in a genome collection, linked to
+# nearby reverse transcriptases. Steps: dna-repeats --art over all records; a window of
+# WINDOW bases on each side of each array; prodigal gene calls (metagenome mode) on the
+# windows only; hmmsearch with Pfam RVT_1 (PF00078); bench/art-link for the RT relation and
+# the coding fraction. Writes OUTDIR/{arrays.tsv,windows.fa,genes.gff,proteins.faa,hits.tbl,
+# census.tsv,times.tsv} and prints a summary.
+# usage: bench/art-census GENOMES.fa[.gz] OUTDIR [-j THREADS]
+set -u
+cd "$(dirname "$0")/.." || exit 1
+[ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
+input=${1:?usage: art-census GENOMES.fa[.gz] OUTDIR [-j THREADS]}
+out=${2:?usage: art-census GENOMES.fa[.gz] OUTDIR [-j THREADS]}
+threads=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+[ "${3:-}" = "-j" ] && threads=${4:?}
+readonly WINDOW=8000
+mkdir -p "$out" || exit 1
+bin=${DNAREPEATS_BIN:-}
+[ -n "$bin" ] || { p=$(nix build .#default --no-link --print-out-paths) || exit 1; bin=$p/bin/dna-repeats; }
+hmm=$(nix build .#pfamRvt1 --no-link --print-out-paths) || exit 1
+cat_input() { case $input in *.gz) gzip -dc "$input" ;; *) cat "$input" ;; esac; }
+: >"$out/times.tsv"
+step() { # step NAME CMD...: run, record wall seconds, fail loudly
+	local name=$1 t0 t1
+	shift
+	t0=$(date +%s.%N)
+	"$@" || { echo "art-census: step $name failed" >&2; exit 1; }
+	t1=$(date +%s.%N)
+	printf '%s\t%s\n' "$name" "$(awk -v a="$t0" -v b="$t1" 'BEGIN {printf "%.1f", b - a}')" | tee -a "$out/times.tsv" >&2
+}
+
+arrays() { cat_input | "$bin" --no-progress --art -j "$threads" - >"$out/arrays.tsv"; }
+# Windows named REC__WSTART__WEND around each array, one record in memory at a time.
+windows() {
+	cat_input | awk -v W="$WINDOW" -v arrays="$out/arrays.tsv" '
+		BEGIN { while ((getline line < arrays) > 0) { split(line, f, "\t"); n = ++cnt[f[1]]; as[f[1], n] = f[2]; ae[f[1], n] = f[3] } }
+		function flush(   k, s, e) {
+			if (name == "" || !(name in cnt)) return
+			for (k = 1; k <= cnt[name]; k++) {
+				s = as[name, k] - W; if (s < 1) s = 1
+				e = ae[name, k] + W; if (e > length(seq)) e = length(seq)
+				printf ">%s__%d__%d\n%s\n", name, s, e, substr(seq, s, e - s + 1)
+			}
+		}
+		/^>/ { flush(); name = substr($1, 2); seq = ""; next }
+		{ gsub(/[ \t\r]/, ""); seq = seq toupper($0) }
+		END { flush() }' >"$out/windows.fa"
+}
+genes() { prodigal -q -p meta -i "$out/windows.fa" -f gff -o "$out/genes.gff" -a "$out/proteins.faa"; }
+hits() { hmmsearch --noali --cpu "$threads" -E 1e-5 --tblout "$out/hits.tbl" "$hmm" "$out/proteins.faa" >/dev/null; }
+link() { luajit bench/art-link "$out/arrays.tsv" "$out/genes.gff" "$out/hits.tbl" >"$out/census.tsv"; }
+
+step arrays arrays
+step windows windows
+step genes genes
+step hits hits
+step link link
+awk -F'\t' '{n++; rel[$8]++; if ($11 + 0 < 0.5) nc++} END {
+	printf "arrays: %d (non-coding: %d); RT upstream (ART-like arrangement): %d; RT near: %d\n", n, nc, rel["upstream"], rel["near"] }' "$out/census.tsv"

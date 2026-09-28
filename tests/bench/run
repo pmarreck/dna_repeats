@@ -131,4 +131,27 @@ got=$(DNAREPEATS_BIN="$ac/fake" bash bench/art-check --genomes "$ac/genomes" --l
 check art-check-windows "$got" "g1=none g2=found g3=found g4=none g5=none g6=found g7=found g8=none "
 check art-check-quiet "$(cat "$ac/err")" ""
 
+# bench/art-link joins --art arrays with prodigal genes and PF00078 hits cut from windows
+# named REC__WSTART__WEND (1-based). An RT is "upstream" when the array lies within 6 kb
+# before its start codon on its own strand, "near" when it is otherwise within the window;
+# coding is the fraction of the array's bases inside predicted genes.
+al="$pdir/al"
+mkdir -p "$al"
+printf 'phA\t1001\t1500\t4\t20\tACGTACGTACGTACGTACGT\t1001,1121,1241,1361\nphB\t20001\t20600\t3\t30\tACGTACGTACGTACGTACGTACGTACGTAA\t20001,20201,20401\nphC\t5001\t5400\t3\t25\tACGTACGTACGTACGTACGTACGTA\t5001,5201,5301\nphA\t60001\t60400\t3\t20\tACGTACGTACGTACGTACGT\t60001,60151,60301\n' >"$al/arrays.tsv"
+# Windows: phA__1__9500 (RT on + at genome 3001..4500: array ends 1500, 1501 bp before it: upstream);
+# phB__12001__28600 (RT on - with start codon at genome 14000: array starts 6001 after it: near);
+# phC__1__13400 (a gene covering genome 5101..5300 overlaps half the array; no RT).
+cat >"$al/genes.gff" <<'GFF'
+phA__1__9500	Prodigal_v2.6.3	CDS	3001	4500	100	+	0	ID=1_1;partial=00
+phA__1__9500	Prodigal_v2.6.3	CDS	5001	5600	50	-	0	ID=1_2;partial=00
+phB__12001__28600	Prodigal_v2.6.3	CDS	1000	2000	100	-	0	ID=2_1;partial=00
+phC__1__13400	Prodigal_v2.6.3	CDS	5101	5300	60	+	0	ID=3_1;partial=00
+GFF
+printf '# tblout\nphA__1__9500_1 - RVT_1 PF00078.33 1.5e-20 70.1 0.1 1e-20 70 0.1 1 1 0 1 1 1 1 -\nphB__12001__28600_1 - RVT_1 PF00078.33 2e-9 30.1 0.1 1e-9 30 0.1 1 1 0 1 1 1 1 -\n' >"$al/hits.tbl"
+got=$(luajit bench/art-link "$al/arrays.tsv" "$al/genes.gff" "$al/hits.tbl" 2>&1 | cut -f1,2,8-11 | tr '\t' ' ')
+check art-link "$got" "phA 1001 upstream 1501 1.5e-20 0.00
+phB 20001 near 6001 2e-9 0.00
+phC 5001 none - - 0.50
+phA 60001 none - - 0.00"
+
 exit "$fails"

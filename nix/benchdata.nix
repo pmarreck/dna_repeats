@@ -170,6 +170,10 @@ in {
 	heldout3Genomes = genomeFarm "scoreboard-heldout3-genomes" heldout3Hashes;
 	heldout3Truth = mkTruth "crisprcasdb-heldout3-truth.tsv" heldout3Hashes;
 	artGenomes = genomeFarm "art-genomes" artHashes;
+	# Pfam RVT_1 (PF00078.33), the general reverse transcriptase profile, for linking arrays to RTs.
+	pfamRvt1 = pkgs.runCommand "PF00078.hmm" { nativeBuildInputs = [ pkgs.gzip ]; } ''
+		gunzip -c ${pkgs.fetchurl { name = "PF00078.hmm.gz"; url = "https://www.ebi.ac.uk/interpro/wwwapi//entry/pfam/PF00078?annotation=hmm"; hash = "sha256-AzDT0bMx4iWhSw6z4IUlmp1lU/bfSVK9xuaO+QqoJWM="; }} > $out
+	'';
 	# Negative control: the dev genomes with each record's bases shuffled (seed 1), so no real
 	# repeat survives; every array a tool reports on them is a false positive.
 	shuffledGenomes = pkgs.runCommand "scoreboard-shuffled-genomes" { nativeBuildInputs = [ pkgs.gawk pkgs.bash ]; } ''

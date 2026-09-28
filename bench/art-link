@@ -1,0 +1,101 @@
+#!/usr/bin/env luajit
+-- Join dna-repeats --art arrays with prodigal genes and PF00078 (RVT_1) hits, all cut from
+-- windows named REC__WSTART__WEND (1-based genome coordinates of the window).
+-- usage: bench/art-link ARRAYS.tsv GENES.gff HITS.tbl
+-- Prints each array's TSV row plus, over genes within 8 kb of it: RT relation (upstream:
+-- the array lies within 6 kb before the RT's start codon on the RT's strand, as in ART
+-- loci; near: another RT in the window; none), distance to that RT's start codon, its best
+-- E-value, and the fraction of the array's bases inside predicted genes (ART arrays are
+-- non-coding).
+
+local UPSTREAM = 6000
+-- Genes farther than this from the array are outside its window (bench/art-census WINDOW).
+local WINDOW = 8000
+
+local function split(line)
+	local f = {}
+	for x in (line .. "\t"):gmatch("([^\t]*)\t") do f[#f + 1] = x end
+	return f
+end
+
+-- Genes per record in genome coordinates, deduplicated across overlapping windows; each gene
+-- keeps the protein id prodigal gives it (window name plus its index within the window).
+local function load_genes(path)
+	local genes, seen, index = {}, {}, {}
+	for line in io.lines(path) do
+		if line:sub(1, 1) ~= "#" then
+			local f = split(line)
+			if f[3] == "CDS" then
+				local rec, wstart = f[1]:match("^(.*)__(%d+)__%d+$")
+				assert(rec, "window name is not REC__WSTART__WEND: " .. f[1])
+				index[f[1]] = (index[f[1]] or 0) + 1
+				local lo = tonumber(wstart) + tonumber(f[4]) - 1
+				local hi = tonumber(wstart) + tonumber(f[5]) - 1
+				local key = rec .. ":" .. lo .. ":" .. hi .. ":" .. f[7]
+				local g = seen[key]
+				if not g then
+					g = { lo = lo, hi = hi, strand = f[7], ids = {} }
+					seen[key] = g
+					genes[rec] = genes[rec] or {}
+					table.insert(genes[rec], g)
+				end
+				g.ids[f[1] .. "_" .. index[f[1]]] = true
+			end
+		end
+	end
+	return genes
+end
+
+local function load_hits(path)
+	local best = {}
+	for line in io.lines(path) do
+		if line:sub(1, 1) ~= "#" then
+			local id, e = line:match("^(%S+)%s+%S+%s+%S+%s+%S+%s+(%S+)")
+			if id then
+				local v = tonumber(e)
+				if not best[id] or v < best[id].v then best[id] = { v = v, text = e } end
+			end
+		end
+	end
+	return best
+end
+
+local function rt_evalue(g, hits)
+	local best
+	for id in pairs(g.ids) do
+		local h = hits[id]
+		if h and (not best or h.v < best.v) then best = h end
+	end
+	return best
+end
+
+local function main(arrays_path, genes_path, hits_path)
+	local genes = load_genes(genes_path)
+	local hits = load_hits(hits_path)
+	for line in io.lines(arrays_path) do
+		local f = split(line)
+		local rec, s, e = f[1], tonumber(f[2]), tonumber(f[3])
+		local rel, dist, ev = "none", "-", "-"
+		local covered = 0
+		local marks = {}
+		for _, g in ipairs(genes[rec] or {}) do
+			if g.hi >= s - WINDOW and g.lo <= e + WINDOW then
+				-- Coding fraction: bases of [s, e] inside any gene, counted once.
+				for x = math.max(s, g.lo), math.min(e, g.hi) do
+					if not marks[x] then marks[x] = true; covered = covered + 1 end
+				end
+				local h = rt_evalue(g, hits)
+				if h then
+					local start = g.strand == "+" and g.lo or g.hi
+					local d = g.strand == "+" and (start - e) or (s - start)
+					local up = d >= 1 and d <= UPSTREAM
+					local better = (up and rel ~= "upstream") or (up == (rel == "upstream") and (dist == "-" or math.abs(d) < math.abs(dist)))
+					if better then rel, dist, ev = up and "upstream" or "near", d, h.text end
+				end
+			end
+		end
+		print(table.concat({ line, rel, tostring(dist), ev, string.format("%.2f", covered / (e - s + 1)) }, "\t"))
+	end
+end
+
+main(assert(arg[1], "usage: art-link ARRAYS GENES HITS"), assert(arg[2]), assert(arg[3]))
