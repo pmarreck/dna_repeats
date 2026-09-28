@@ -1,7 +1,8 @@
 #!/usr/bin/env luajit
 -- Join dna-repeats --art arrays with prodigal genes and PF00078 (RVT_1) hits, all cut from
 -- windows named REC__WSTART__WEND (1-based genome coordinates of the window).
--- usage: bench/art-link ARRAYS.tsv GENES.gff HITS.tbl
+-- usage: bench/art-link ARRAYS.tsv GENES.gff HITS.tbl [CLASSES.tsv]
+--   CLASSES.tsv (protein id, RT class) adds the linked RT's class as a last column.
 -- Prints each array's TSV row plus, over genes within 8 kb of it: RT relation (upstream:
 -- the array lies within 6 kb before the RT's start codon on the RT's strand, as in ART
 -- loci; near: another RT in the window; none), distance to that RT's start codon, its best
@@ -64,18 +65,25 @@ local function rt_evalue(g, hits)
 	local best
 	for id in pairs(g.ids) do
 		local h = hits[id]
-		if h and (not best or h.v < best.v) then best = h end
+		if h and (not best or h.v < best.v) then best = { v = h.v, text = h.text, id = id } end
 	end
 	return best
 end
 
-local function main(arrays_path, genes_path, hits_path)
+local function main(arrays_path, genes_path, hits_path, classes_path)
 	local genes = load_genes(genes_path)
 	local hits = load_hits(hits_path)
+	local classes = {}
+	if classes_path then
+		for line in io.lines(classes_path) do
+			local id, class = line:match("^(%S+)\t(%S+)")
+			if id then classes[id] = class end
+		end
+	end
 	for line in io.lines(arrays_path) do
 		local f = split(line)
 		local rec, s, e = f[1], tonumber(f[2]), tonumber(f[3])
-		local rel, dist, ev = "none", "-", "-"
+		local rel, dist, ev, rt = "none", "-", "-", nil
 		local covered = 0
 		local marks = {}
 		for _, g in ipairs(genes[rec] or {}) do
@@ -90,12 +98,14 @@ local function main(arrays_path, genes_path, hits_path)
 					local d = g.strand == "+" and (start - e) or (s - start)
 					local up = d >= 1 and d <= UPSTREAM
 					local better = (up and rel ~= "upstream") or (up == (rel == "upstream") and (dist == "-" or math.abs(d) < math.abs(dist)))
-					if better then rel, dist, ev = up and "upstream" or "near", d, h.text end
+					if better then rel, dist, ev, rt = up and "upstream" or "near", d, h.text, h.id end
 				end
 			end
 		end
-		print(table.concat({ line, rel, tostring(dist), ev, string.format("%.2f", covered / (e - s + 1)) }, "\t"))
+		local cols = { line, rel, tostring(dist), ev, string.format("%.2f", covered / (e - s + 1)) }
+		if classes_path then cols[#cols + 1] = rt and classes[rt] or "-" end
+		print(table.concat(cols, "\t"))
 	end
 end
 
-main(assert(arg[1], "usage: art-link ARRAYS GENES HITS"), assert(arg[2]), assert(arg[3]))
+main(assert(arg[1], "usage: art-link ARRAYS GENES HITS [CLASSES]"), assert(arg[2]), assert(arg[3]), arg[4])

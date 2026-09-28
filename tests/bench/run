@@ -153,6 +153,12 @@ check art-link "$got" "phA 1001 upstream 1501 1.5e-20 0.00
 phB 20001 near 6001 2e-9 0.00
 phC 5001 none - - 0.50
 phA 60001 none - - 0.00"
+printf 'phA__1__9500_1\tRVT-UG27\n' >"$al/classes.tsv"
+got=$(luajit bench/art-link "$al/arrays.tsv" "$al/genes.gff" "$al/hits.tbl" "$al/classes.tsv" 2>&1 | cut -f1,2,12 | tr '\t' ' ')
+check art-link-rt-class "$got" "phA 1001 RVT-UG27
+phB 20001 -
+phC 5001 -
+phA 60001 -"
 
 # bench/art-cluster groups census rows by repeat similarity on either strand: a repeat, a
 # one-mismatch variant and its reverse complement form one family; an unrelated repeat its
