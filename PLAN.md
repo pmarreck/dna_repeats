@@ -9,10 +9,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 
 - [ ] ART (Peter, 2026-09-28): run on the relevant genomes and try to exceed the Anthropic ART preprint. Feasibility: MarsHill (MW248466.1) array found upstream of the RT (5 copies, 14-nt core -> 35-nt consensus) but CRISPR filters reject it (conservation 0.897, spacer 10-mer sharing 0.33); scope questions pending with Peter.
 	- [ ] ART 3: pin INPHARED (all GenBank phage genomes) and scan it; time and memory for the whole collection.
-	- [x] ART 4: bench/art-census (dna-repeats --art, prodigal on ±8 kb windows, Pfam RVT_1 hmmsearch, bench/art-link tested on fixtures). On the 8 known genomes: all 8 have an array upstream of an RT, including LPJP1's second RT (array 518 bp upstream, 4 copies, 35 nt), which the RT-first held-out check missed; under 1 s total. (done 2026-09-28 10:25 EDT)
-	- [x] ART 5a: bench/art-cluster (repeat families on both strands, containment identity >= 0.8, labeled with bench/art_known.tsv); tested, 2 mutants killed. (done 2026-09-28 10:15 EDT)
 	- [ ] ART 5b: census runs: MGV done; INPHARED done (done 2026-09-28 12:00 EDT); shuffled MGV control done (0f17fa9); GPD done (no ART-like array); IMG/VR v4.1 when Peter has JGI access.
-	- [x] ART 5c: art-cluster centroid clustering (10e8c91); art-screen with Rfam, ARAGORN and CRISPR columns (774f188, 24e2ffe). (done 2026-09-28 12:05 EDT)
 	- [x] ART 5d: gene context (art-context, art-context-run, Pfam-A 38.2) and dinucleotide control (shuffle-fasta-di); results in intents/art_search.md. (done 2026-09-28 16:20 EDT)
 	- [x] ART 5e: UG27 preprint compared (family 35 = its conserved ncRNA motif; 65 and 15 not in its constructs); ECF-sigma lead still open. (done 2026-09-28 16:35 EDT)
 	- [ ] ART 5f: ECF-sigma lead (families 3, 4): orientation and distance of the sigma gene to the array, host range, whether the repeats carry ECF promoter motifs (-35 AAC, -10 CGT).
@@ -47,9 +44,9 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [x] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N. (done 2026-09-28 16:52 EDT)
 - [x] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named. (done 2026-09-28 17:22 EDT)
 - [ ] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share.
-- [ ] CR9: do not install the explore tool; make the differential test exercise the production Finder pattern (CAPTURE_HISTORY, DOTALL gap, JIT) or say what it pins.
+- [ ] CR9: (explore no longer installed, 9db1715) make the differential test exercise the production Finder pattern (CAPTURE_HISTORY, DOTALL gap, JIT) or say what it pins.
 - [ ] CR10: split the "identical spacers are not an array" test so each of its three filters has its own failing case; add inclusive-edge spacer bound tests (min_spacer, max_spacer).
 - [x] CR11: README "12.7 times faster" is end-to-end one-thread (59.0 s to 4.65 s, before-time never logged); say so, and log a rebuilt parent timing if cheap. (done 2026-09-28 16:37 EDT)
 - [ ] CR12: divergence opponent rows (e69d2e8) predate plant-arrays and lack input_sha256; rerun MinCED and PILER-CR on the pinned generator and add them to bench/verify.
-- [ ] CR13: advisories: dupe-then-append leak on OOM (finder.zig:125, families.zig:77/88/201); negative named-group lookup cast (finder.zig:51); JIT NOMEMORY ignored (finder.zig:45); normalize FASTA byte classifier per byte, not bucket totals.
+- [ ] CR13: advisories (OOM leaks fixed in 9db1715): negative named-group lookup cast (finder.zig:51); JIT NOMEMORY ignored (finder.zig:45); normalize FASTA byte classifier per byte, not bucket totals.
 - [ ] CR14 (backlog): u32 positions with a >4 GiB record guard; keep only needed family headers in callArrays (main.zig:207).
