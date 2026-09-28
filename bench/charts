@@ -1,0 +1,189 @@
+#!/usr/bin/env luajit
+-- README charts from the scoreboard log: held-out #3 small multiples and divergence curves,
+-- written as self-contained SVGs (light and dark palettes inside, system fonts).
+-- usage: bench/charts [LOG] [OUTDIR]   (defaults: bench/scoreboard-*.ndjson of this machine, docs/img)
+-- Rendering is pure (rows in, SVG string out); only main reads the log and writes files.
+
+local function esc(s) return (tostring(s):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")) end
+local function fmt(x, d) return string.format("%." .. (d or 1) .. "f", x) end
+
+-- Palette: categorical slots 1-3 (validated all-pairs, light and dark) and neutrals.
+local STYLE = [[
+<style>
+svg { --bg:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --ink3:#75736d; --grid:#e8e7e2; --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; }
+@media (prefers-color-scheme: dark) { svg { --bg:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --ink3:#9a988f; --grid:#2e2e2c; --s1:#3987e5; --s2:#d95926; --s3:#199e70; } }
+text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink2); }
+.t { font-size: 15px; font-weight: 600; fill: var(--ink); }
+.n { font-size: 11px; fill: var(--ink3); }
+.v { font-size: 12px; fill: var(--ink); }
+.b { font-weight: 600; }
+.bg { fill: var(--bg); }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.base { stroke: var(--ink3); stroke-width: 1; }
+</style>]]
+
+local TOOLS = {
+	{ id = "dnarepeats_1t", name = "dna-repeats", color = "var(--s1)" },
+	{ id = "minced", name = "MinCED", color = "var(--s2)" },
+	{ id = "pilercr", name = "PILER-CR", color = "var(--s3)" },
+}
+
+-- Horizontal bar with a 4px rounded data end and a square baseline end.
+local function bar(x0, y, w, h, color)
+	w = math.max(w, 2)
+	local r = math.min(4, w)
+	return string.format('<path d="M%.1f,%.1f h%.1f a%d,%d 0 0 1 %d,%d v%.1f a%d,%d 0 0 1 %d,%d h%.1f z" fill="%s"/>',
+		x0, y, w - r, r, r, r, r, h - 2 * r, r, r, -r, r, -(w - r), color)
+end
+
+-- One panel of the held-out small multiples: three bars on one axis from zero.
+local function panel(ox, oy, p, rows)
+	local out = {}
+	local W, labelW, valW = 280, 86, 78
+	local x0, x1 = ox + labelW, ox + W - valW
+	local function sx(v) return x0 + (x1 - x0) * v / p.max end
+	out[#out + 1] = string.format('<text class="t" x="%d" y="%d" style="font-size:13px">%s</text>', ox, oy, esc(p.title))
+	out[#out + 1] = string.format('<text class="n" x="%d" y="%d">%s</text>', ox, oy + 16, esc(p.note))
+	local top = oy + 28
+	for q = 0, 4 do
+		local v = p.max * q / 4
+		local x = sx(v)
+		out[#out + 1] = string.format('<line class="%s" x1="%.1f" x2="%.1f" y1="%d" y2="%d"/>', q == 0 and "base" or "grid", x, x, top, top + 3 * 30)
+		out[#out + 1] = string.format('<text class="n" x="%.1f" y="%d" text-anchor="middle">%s</text>', x, top + 3 * 30 + 13, p.tick(v))
+	end
+	for i, t in ipairs(TOOLS) do
+		local r = rows[t.id]
+		local y = top + (i - 1) * 30
+		local v = p.val(r)
+		out[#out + 1] = string.format('<text x="%d" y="%.1f" style="font-size:12px">%s</text>', ox, y + 19, esc(t.name))
+		out[#out + 1] = bar(x0, y + 7, sx(v) - x0, 18, t.color)
+		out[#out + 1] = string.format('<text class="v%s" x="%.1f" y="%.1f">%s</text>', i == 1 and " b" or "", sx(v) + 6, y + 20, esc(p.label(r)))
+	end
+	return table.concat(out, "\n")
+end
+
+-- Held-out #3: recall, precision, one-thread time, memory and exact-repeat rate per tool.
+local function heldout_svg(rows, set_name)
+	local function pct(a, b) return b > 0 and 100 * a / b or 0 end
+	local panels = {
+		{ title = "Recall", note = "curated arrays found (higher is better)", max = 100,
+			val = function(r) return pct(r.recalled, r.el4) end, label = function(r) return r.recalled .. "/" .. r.el4 end, tick = function(v) return v .. "%" end },
+		{ title = "Precision", note = "predictions inside a curated array", max = 100,
+			val = function(r) return pct(r.correct, r.predictions) end, label = function(r) return fmt(pct(r.correct, r.predictions)) .. "%" end, tick = function(v) return v .. "%" end },
+		{ title = "Exact repeat sequence", note = "matches CRISPRCasdb's repeat", max = 100,
+			val = function(r) return pct(r.dr_exact, r.dr_scored) end, label = function(r) return fmt(pct(r.dr_exact, r.dr_scored)) .. "%" end, tick = function(v) return v .. "%" end },
+		{ title = "Time on one core", note = "seconds for all 30 genomes (lower is better)", max = 25,
+			val = function(r) return r.wall_s end, label = function(r) return fmt(r.wall_s, 2) .. " s" end, tick = function(v) return fmt(v, 0) end },
+		{ title = "Peak memory", note = "MB, largest genome (lower is better)", max = 500,
+			val = function(r) return r.peak_kb / 1024 end, label = function(r) return fmt(r.peak_kb / 1024) .. " MB" end, tick = function(v) return fmt(v, 0) end },
+	}
+	local W, H = 900, 350
+	local out = { string.format('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d" role="img" aria-label="%s">', W, H, W, H,
+		esc("Held-out set #3: recall, precision, exact repeat, time on one core and peak memory for dna-repeats, MinCED and PILER-CR")), STYLE,
+		string.format('<rect class="bg" width="%d" height="%d" rx="6"/>', W, H),
+		string.format('<text class="t" x="20" y="30">%s</text>', esc(set_name)) }
+	for i, p in ipairs(panels) do
+		local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
+		out[#out + 1] = panel(20 + col * 295, 62 + row * 145, p, rows)
+	end
+	-- Legend in the free sixth cell.
+	for i, t in ipairs(TOOLS) do
+		local y = 222 + (i - 1) * 22
+		out[#out + 1] = string.format('<rect x="610" y="%d" width="12" height="12" rx="3" fill="%s"/><text x="630" y="%d" style="font-size:13px">%s</text>',
+			y, t.color, y + 11, esc(t.name .. (t.id == "dnarepeats_1t" and " (one thread)" or "")))
+	end
+	out[#out + 1] = "</svg>"
+	return table.concat(out, "\n")
+end
+
+-- Divergence: arrays recalled of 20 per substitution rate, one line per tool.
+local function divergence_svg(series, rates)
+	local W, H = 900, 360
+	local m = { l = 48, r = 215, t = 44, b = 46 }
+	local function sx(r) return m.l + (W - m.l - m.r) * r / rates[#rates] end
+	local function sy(v) return m.t + (H - m.t - m.b) * (1 - v / 20) end
+	local out = { string.format('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d" role="img" aria-label="%s">', W, H, W, H,
+		esc("Arrays recalled out of 20 as repeat copies are mutated")), STYLE,
+		string.format('<rect class="bg" width="%d" height="%d" rx="6"/>', W, H),
+		'<text class="t" x="20" y="28">Planted arrays found (of 20) as every repeat copy is mutated</text>' }
+	for v = 0, 20, 5 do
+		out[#out + 1] = string.format('<line class="%s" x1="%d" x2="%d" y1="%.1f" y2="%.1f"/><text class="n" x="%d" y="%.1f" text-anchor="end">%d</text>',
+			v == 0 and "base" or "grid", m.l, W - m.r, sy(v), sy(v), m.l - 8, sy(v) + 4, v)
+	end
+	for _, r in ipairs(rates) do
+		out[#out + 1] = string.format('<text class="n" x="%.1f" y="%d" text-anchor="middle">%d%%</text>', sx(r), H - m.b + 18, r)
+	end
+	out[#out + 1] = string.format('<text class="n" x="%.1f" y="%d" text-anchor="middle">substitutions per base</text>', (m.l + W - m.r) / 2, H - 8)
+	for i = #series, 1, -1 do
+		local s = series[i]
+		local d = {}
+		for k, r in ipairs(rates) do d[#d + 1] = (k == 1 and "M" or "L") .. string.format("%.1f,%.1f", sx(r), sy(s.v[k])) end
+		out[#out + 1] = string.format('<path d="%s" fill="none" stroke="%s" stroke-width="2" stroke-linejoin="round"%s/>', table.concat(d, " "), s.color, s.dash and ' stroke-dasharray="6 4"' or "")
+		for k, r in ipairs(rates) do
+			out[#out + 1] = string.format('<circle cx="%.1f" cy="%.1f" r="4" fill="%s" stroke="var(--bg)" stroke-width="2"/>', sx(r), sy(s.v[k]), s.color)
+		end
+	end
+	-- Direct labels at 8%, stacked apart, naming each line and its value there.
+	local k8
+	for k, r in ipairs(rates) do if r == 8 then k8 = k end end
+	local labs = {}
+	for _, s in ipairs(series) do labs[#labs + 1] = { s = s, y = sy(s.v[k8]) } end
+	table.sort(labs, function(a, b) return a.y < b.y end)
+	for i = 2, #labs do if labs[i].y - labs[i - 1].y < 16 then labs[i].y = labs[i - 1].y + 16 end end
+	out[#out + 1] = string.format('<text class="n" x="%d" y="%.1f">found at 8%%</text>', W - m.r + 12, labs[1].y - 16)
+	for _, l in ipairs(labs) do
+		out[#out + 1] = string.format('<line class="grid" x1="%.1f" x2="%d" y1="%.1f" y2="%.1f"/>', sx(8) + 6, W - m.r + 8, sy(l.s.v[k8]), l.y)
+		out[#out + 1] = string.format('<line x1="%d" x2="%d" y1="%.1f" y2="%.1f" stroke="%s" stroke-width="2"%s/>', W - m.r + 12, W - m.r + 28, l.y, l.y, l.s.color, l.s.dash and ' stroke-dasharray="4 3"' or "")
+		out[#out + 1] = string.format('<text x="%d" y="%.1f" style="font-size:12px">%s: %d</text>', W - m.r + 32, l.y + 4, esc(l.s.name), l.s.v[k8])
+	end
+	out[#out + 1] = "</svg>"
+	return table.concat(out, "\n")
+end
+
+-- Latest row per (set, tool) from the log, flattened by jq.
+local function load(log)
+	local cmd = "jq -rs 'group_by(.set + \"|\" + .tool) | map(last) | .[] | [.set, .tool, .recalled, .el4, .predictions, .correct, .wall_s, .peak_kb, (.dr_scored // 0), (.dr_exact // 0)] | @tsv' " .. string.format("%q", log)
+	local p = assert(io.popen(cmd))
+	local rows = {}
+	for line in p:lines() do
+		local f = {}
+		for x in (line .. "\t"):gmatch("([^\t]*)\t") do f[#f + 1] = x end
+		rows[f[1] .. "|" .. f[2]] = { recalled = tonumber(f[3]), el4 = tonumber(f[4]), predictions = tonumber(f[5]), correct = tonumber(f[6]),
+			wall_s = tonumber(f[7]), peak_kb = tonumber(f[8]), dr_scored = tonumber(f[9]), dr_exact = tonumber(f[10]) }
+	end
+	assert(p:close(), "jq failed on " .. log)
+	return rows
+end
+
+local function main(log, outdir)
+	local rows = load(log)
+	local h3 = {}
+	for _, t in ipairs(TOOLS) do h3[t.id] = assert(rows["heldout3|" .. t.id], "no heldout3 row for " .. t.id) end
+	local rates = { 0, 2, 4, 6, 8, 10, 12, 15 }
+	local series = {
+		{ id = "dnarepeats_sensitive", name = "dna-repeats --sensitive", color = "var(--s1)", dash = true },
+		{ id = "dnarepeats", name = "dna-repeats", color = "var(--s1)" },
+		{ id = "minced", name = "MinCED", color = "var(--s2)" },
+		{ id = "pilercr", name = "PILER-CR", color = "var(--s3)" },
+	}
+	for _, s in ipairs(series) do
+		s.v = {}
+		for k, r in ipairs(rates) do s.v[k] = assert(rows["div-" .. r .. "|" .. s.id], "no div-" .. r .. " row for " .. s.id).recalled end
+	end
+	local function write(name, svg)
+		local f = assert(io.open(outdir .. "/" .. name, "w"))
+		f:write(svg, "\n")
+		f:close()
+		io.stderr:write("wrote ", outdir, "/", name, "\n")
+	end
+	write("heldout3.svg", heldout_svg(h3, "Held-out set #3: 30 genomes, 73 curated arrays, every tool on one thread"))
+	write("divergence.svg", divergence_svg(series, rates))
+end
+
+local log, outdir = arg[1], arg[2] or "docs/img"
+if not log then
+	local p = assert(io.popen("ls bench/scoreboard-*.ndjson | head -1"))
+	log = p:read("*l")
+	p:close()
+end
+main(assert(log, "no scoreboard log found"), outdir)

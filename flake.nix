@@ -79,7 +79,7 @@
 			});
 			devShells = forSystems (system: {
 				default = nixpkgs.legacyPackages.${system}.mkShell {
-					packages = with nixpkgs.legacyPackages.${system}; [ zig hyperfine jq time ];
+					packages = with nixpkgs.legacyPackages.${system}; [ zig hyperfine jq time luajit ];
 				};
 			});
 		};

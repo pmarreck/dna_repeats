@@ -1,0 +1,23 @@
+# set	tool	recalled	el4	predictions	correct	dr_scored	dr_exact
+div-0	dnarepeats	20	20	20	20	20	19
+div-0	dnarepeats_sensitive	20	20	20	20	20	19
+div-10	dnarepeats	5	20	7	7	7	0
+div-10	dnarepeats_sensitive	8	20	9	9	9	1
+div-12	dnarepeats	1	20	2	2	2	0
+div-12	dnarepeats_sensitive	1	20	3	3	3	0
+div-15	dnarepeats	0	20	0	0	0	0
+div-15	dnarepeats_sensitive	0	20	0	0	0	0
+div-2	dnarepeats	20	20	20	20	20	16
+div-2	dnarepeats_sensitive	20	20	20	20	20	16
+div-4	dnarepeats	20	20	20	20	20	16
+div-4	dnarepeats_sensitive	20	20	20	20	20	16
+div-6	dnarepeats	18	20	19	19	19	12
+div-6	dnarepeats_sensitive	19	20	20	20	20	13
+div-8	dnarepeats	12	20	14	14	14	8
+div-8	dnarepeats_sensitive	16	20	19	19	19	9
+heldout3	dnarepeats_1t	68	73	74	71	72	60
+heldout3	minced	67	73	71	67	67	51
+heldout3	pilercr	63	73	75	71	71	52
+shuffled	dnarepeats_1t	0	0	0	0	0	0
+shuffled	minced	0	0	0	0	0	0
+shuffled	pilercr	0	0	0	0	0	0

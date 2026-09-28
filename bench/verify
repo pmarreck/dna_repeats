@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Reproduce the README's headline results and check them against bench/expected.tsv:
+# held-out set #3 and the shuffled negative control (every tool, one thread) and the
+# divergence sweep (dna-repeats). Recall, predictions, correct predictions and exact
+# repeats are deterministic and must match exactly; times and memory depend on the
+# machine, so they are printed with the speed and memory ratios but never fail the run.
+# usage: bench/verify     (exit 0 when every expected row matches)
+set -u
+cd "$(dirname "$0")/.." || exit 1
+[ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/verify.XXXXXX") || exit 1
+trap 'rm -r "$work"' EXIT
+export SCOREBOARD_LOG=$work/log.ndjson # keep these runs out of the committed log
+status=0
+bench/scoreboard --set heldout3 minced pilercr dnarepeats_1t || status=1
+bench/scoreboard --set shuffled minced pilercr dnarepeats_1t | sed 1d || status=1
+bench/divergence dnarepeats dnarepeats_sensitive >/dev/null || status=1
+
+# Compare the latest measured row for each expected (set, tool).
+jq -r '[.set, .tool, .recalled, .el4, .predictions, .correct, .dr_scored, .dr_exact] | @tsv' "$SCOREBOARD_LOG" >"$work/got.tsv"
+checked=0 mismatched=0
+while IFS=$'\t' read -r set tool want; do
+	got=$(awk -F'\t' -v s="$set" -v t="$tool" '$1 == s && $2 == t {row = $3; for (i = 4; i <= NF; i++) row = row "\t" $i} END {print row}' "$work/got.tsv")
+	checked=$((checked + 1))
+	if [ "$got" != "$want" ]; then
+		mismatched=$((mismatched + 1))
+		printf 'MISMATCH %s %s: got [%s] want [%s]\n' "$set" "$tool" "$got" "$want" >&2
+	fi
+done < <(grep -v '^#' bench/expected.tsv | awk -F'\t' -v OFS='\t' '{row = $3; for (i = 4; i <= NF; i++) row = row "\t" $i; print $1, $2, row}')
+
+echo
+jq -rs 'map(select(.set == "heldout3")) | (map({key: .tool, value: .}) | from_entries) as $r
+	| "One thread on held-out #3: dna-repeats \($r.dnarepeats_1t.wall_s) s, \($r.dnarepeats_1t.peak_kb / 1024 | floor) MB; "
+	+ "\($r.minced.wall_s / $r.dnarepeats_1t.wall_s * 10 | floor / 10)x faster than MinCED, \($r.pilercr.wall_s / $r.dnarepeats_1t.wall_s * 10 | floor / 10)x faster than PILER-CR; "
+	+ "\($r.minced.peak_kb / $r.dnarepeats_1t.peak_kb | floor)x less memory than MinCED, \($r.pilercr.peak_kb / $r.dnarepeats_1t.peak_kb * 10 | floor / 10)x less than PILER-CR."' "$SCOREBOARD_LOG"
+if [ "$mismatched" -eq 0 ] && [ "$status" -eq 0 ]; then
+	printf '\033[32mVERIFIED\033[0m: %d of %d expected results reproduced exactly.\n' "$checked" "$checked"
+else
+	printf '\033[31mNOT VERIFIED\033[0m: %d of %d expected results differ%s.\n' "$mismatched" "$checked" "$([ "$status" -eq 0 ] || echo '; a tool failed')"
+	exit 1
+fi
