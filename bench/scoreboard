@@ -71,6 +71,8 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/scoreboard.XXXXXX") || exit 1
 trap 'rm -r "$work"' EXIT
 cpu=$(awk -F': ' '/model name/ {print $2; exit}' /proc/cpuinfo 2>/dev/null || sysctl -n machdep.cpu.brand_string 2>/dev/null)
 machine=$(printf '%s|%s|%s' "$(uname -n | cut -d. -f1)" "$(uname -m)" "$cpu" | sha256sum | cut -c1-12)
+# Logical CPUs: dna-repeats uses one thread per CPU by default.
+cpus=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 log=${SCOREBOARD_LOG:-bench/scoreboard-$machine.ndjson}
 commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 # Uncommitted changes (other than scoreboard logs) mean the commit does not describe the code.
@@ -115,7 +117,7 @@ for tool in "${tools[@]}"; do
 		--arg tool "$tool" --arg tool_path "$tool_path" --arg input_sha256 "$input_sha256" \
 		--argjson el4 "$el4" --argjson recalled "$rec" --argjson predictions "$pred" --argjson correct "$cor" \
 		--argjson wall_s "$wall" --argjson peak_kb "$peak" --argjson failures "$failures" \
-		--argjson dr_scored "$drn" --argjson dr_exact "$drx" --argjson dr_edit "$dre" \
-		'{commit: $commit, dirty: $dirty, when: $when, machine: $machine, set: $set, tool: $tool, tool_path: $tool_path, input_sha256: $input_sha256, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, wall_s: $wall_s, peak_kb: $peak_kb, failures: $failures, dr_scored: $dr_scored, dr_exact: $dr_exact, dr_edit: $dr_edit}' >>"$log"
+		--argjson cpus "$cpus" --argjson dr_scored "$drn" --argjson dr_exact "$drx" --argjson dr_edit "$dre" \
+		'{commit: $commit, dirty: $dirty, when: $when, machine: $machine, cpus: $cpus, set: $set, tool: $tool, tool_path: $tool_path, input_sha256: $input_sha256, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, wall_s: $wall_s, peak_kb: $peak_kb, failures: $failures, dr_scored: $dr_scored, dr_exact: $dr_exact, dr_edit: $dr_edit}' >>"$log"
 done
 exit "$status"

@@ -13,7 +13,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/verify.XXXXXX") || exit 1
 trap 'rm -r "$work"' EXIT
 export SCOREBOARD_LOG=$work/log.ndjson # keep these runs out of the committed log
 status=0
-bench/scoreboard --set heldout3 minced pilercr dnarepeats_1t || status=1
+bench/scoreboard --set heldout3 minced pilercr dnarepeats_1t dnarepeats || status=1
 bench/scoreboard --set shuffled minced pilercr dnarepeats_1t | sed 1d || status=1
 bench/divergence dnarepeats dnarepeats_sensitive >/dev/null || status=1
 
@@ -33,7 +33,8 @@ echo
 jq -rs 'map(select(.set == "heldout3")) | (map({key: .tool, value: .}) | from_entries) as $r
 	| "One thread on held-out #3: dna-repeats \($r.dnarepeats_1t.wall_s) s, \($r.dnarepeats_1t.peak_kb / 1024 | floor) MB; "
 	+ "\($r.minced.wall_s / $r.dnarepeats_1t.wall_s * 10 | floor / 10)x faster than MinCED, \($r.pilercr.wall_s / $r.dnarepeats_1t.wall_s * 10 | floor / 10)x faster than PILER-CR; "
-	+ "\($r.minced.peak_kb / $r.dnarepeats_1t.peak_kb | floor)x less memory than MinCED, \($r.pilercr.peak_kb / $r.dnarepeats_1t.peak_kb * 10 | floor / 10)x less than PILER-CR."' "$SCOREBOARD_LOG"
+	+ "\($r.minced.peak_kb / $r.dnarepeats_1t.peak_kb | floor)x less memory than MinCED, \($r.pilercr.peak_kb / $r.dnarepeats_1t.peak_kb * 10 | floor / 10)x less than PILER-CR.\n"
+	+ "All \($r.dnarepeats.cpus) CPUs: dna-repeats \($r.dnarepeats.wall_s) s, \($r.minced.wall_s / $r.dnarepeats.wall_s | floor)x faster than MinCED, \($r.pilercr.wall_s / $r.dnarepeats.wall_s | floor)x faster than PILER-CR."' "$SCOREBOARD_LOG"
 if [ "$mismatched" -eq 0 ] && [ "$status" -eq 0 ]; then
 	printf '\033[32mVERIFIED\033[0m: %d of %d expected results reproduced exactly.\n' "$checked" "$checked"
 else

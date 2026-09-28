@@ -95,6 +95,7 @@ check scoreboard-good-recall "$(jq -r '"\(.recalled)/\(.el4) \(.failures)"' "$sb
 check scoreboard-dr-accuracy "$(jq -r '"\(.dr_scored) \(.dr_exact) \(.dr_edit)"' "$sb/log")" "2 1 1"
 check scoreboard-tool-path "$(jq -r .tool_path "$sb/log")" "$sb/good"
 check scoreboard-input-checksum "$(jq -r .input_sha256 "$sb/log" | grep -cE '^[0-9a-f]{64}$')" 1
+check scoreboard-logs-cpus "$(jq -r '.cpus | type' "$sb/log")" number
 check scoreboard-good-quiet "$(cat "$sb/err")" ""
 sbrun bad
 check scoreboard-bad-exit "$?" 1
