@@ -3,7 +3,7 @@
 #   TRUTH: accession, organism, start (1-based), length, orientation, evidence level, DR
 #   PREDICTIONS: accession, start, end (1-based, inclusive)[, repeat unit]
 # Recall: a level-4 array is recalled when the union of predictions covers >= half its bases.
-# Precision: a prediction is correct when >= half its bases lie inside any truth array
+# Precision: a prediction is correct when >= half its bases lie inside the union of truth arrays
 # (any evidence level, so finding a lower-evidence candidate is not penalized).
 # Repeat accuracy: a prediction with a unit overlapping a truth array with a DR scores its
 # Levenshtein distance to that DR on the closer strand.
@@ -61,8 +61,13 @@ END {
 			if (c >= MIN_FRACTION * (te[acc, t] - ts[acc, t] + 1)) recalled++
 		}
 		for (p = 1; p <= np[acc]; p++) {
-			inside = 0
-			for (t = 1; t <= nt[acc]; t++) inside += overlap(ps[acc, p], pe[acc, p], ts[acc, t], te[acc, t])
+			split("", covered) # union of truth bases inside the prediction, each counted once
+			for (t = 1; t <= nt[acc]; t++) {
+				lo = ps[acc, p] > ts[acc, t] ? ps[acc, p] : ts[acc, t]
+				hi = pe[acc, p] < te[acc, t] ? pe[acc, p] : te[acc, t]
+				for (x = lo; x <= hi; x++) covered[x] = 1
+			}
+			inside = 0; for (x in covered) inside++
 			if (inside >= MIN_FRACTION * (pe[acc, p] - ps[acc, p] + 1)) correct++
 			# Repeat accuracy against the first overlapping truth array that has a DR.
 			if (pu[acc, p] != "") for (t = 1; t <= nt[acc]; t++) {

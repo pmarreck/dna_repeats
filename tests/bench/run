@@ -28,6 +28,11 @@ check union-coverage "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=2\tcorrect=2
 got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tDR\n') <(printf 'C\t1\t40\nC\t1\t40\n') | tail -1)
 check no-double-count "$got" $'TOTAL\tel4=1\trecalled=0\tpredictions=2\tcorrect=2'
 
+# Precision takes the union of truth coverage too: two truth rows over the same 40 bases of
+# a 100-base prediction put 40%, not 80%, of it inside truth (wrong).
+got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t40\t1\t4\tDR\nC\to\t1\t40\t1\t1\tDR\n') <(printf 'C\t1\t100\n') | tail -1)
+check precision-union "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=1\tcorrect=0'
+
 # Predictions on a sequence with no truth rows are wrong, not ignored (negative controls rely on it).
 got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tDR\n') <(printf 'C\t1\t100\nZ\t5\t50\n') | tail -1)
 check truthless-predictions-count "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=2\tcorrect=1'
