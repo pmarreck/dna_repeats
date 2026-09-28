@@ -214,7 +214,11 @@ cat >"$an/cm.tbl" <<'TBL'
 4    Intron_gpII          RF00029   2|g2:6-10            -         -          cm        1       71       11       83      +    no    1 0.63   0.0   40.0   3e-08    !   *       -      -      -      -      -      -      71      99 group II
 TBL
 printf '>1|g1:1-4\n2 genes found\n1 tRNA-Ala [11,86]\n2 tRNA-Gly [100,170]\n>2|g2:6-10\n0 genes found\n>3|g3:1-9\n1 gene found\n1 tmRNA [1,300]\n>end \t3 sequences\n' >"$an/ara.txt"
+# The optional CRISPR.tsv (dna-repeats --crispr on the representatives) adds a CRISPR array count.
+printf '3|g3:1-9\t1\t9\t4\t36\tACCG\t1,2,3,4\n3|g3:1-9\t20\t90\t4\t36\tACCG\t1,2,3,4\n1|g1:1-4\t1\t4\t3\t30\tAC\t1,2,3\n' >"$an/crispr.tsv"
 check art-annotate "$(luajit bench/art-annotate "$an/fam.tsv" "$an/reps.fa" "$an/cm.tbl" "$an/ara.txt")" \
 	"$(printf '1\t9\t8\t0\t-\t0.00\tAC\tg1:1-4\ttRNA\t7.6e-15\t2\n2\t5\t4\t1\t-\t0.10\tAA\tg2:6-10\tIntron_gpII\t3e-08\t0\n3\t2\t2\t0\t-\t0.00\tGG\tg3:1-9\t-\t-\t1')"
+check art-annotate-crispr "$(luajit bench/art-annotate "$an/fam.tsv" "$an/reps.fa" "$an/cm.tbl" "$an/ara.txt" "$an/crispr.tsv")" \
+	"$(printf '1\t9\t8\t0\t-\t0.00\tAC\tg1:1-4\ttRNA\t7.6e-15\t2\t1\n2\t5\t4\t1\t-\t0.10\tAA\tg2:6-10\tIntron_gpII\t3e-08\t0\t0\n3\t2\t2\t0\t-\t0.00\tGG\tg3:1-9\t-\t-\t1\t2')"
 
 exit "$fails"

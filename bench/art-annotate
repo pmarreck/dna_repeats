@@ -2,10 +2,13 @@
 -- Known-RNA screen of repeat families: each art-cluster family row plus its representative
 -- locus (bench/art-reps), the best included Rfam hit from cmscan --fmt 2 --tblout (lowest
 -- E-value among "!" hits) and the number of tRNA/tmRNA genes ARAGORN (-w) finds there.
--- A family matching a known RNA is a rediscovery, not a candidate novel element.
--- usage: bench/art-annotate FAMILIES.tsv REPS.fa CMSCAN.tbl ARAGORN.txt
+-- The optional CRISPR.tsv (dna-repeats --crispr on the representatives) adds the number of
+-- CRISPR arrays there: the ART preset takes every second copy of a CRISPR array, whose copies
+-- are closer than its minimum spacer. A family matching a known RNA or CRISPR is a
+-- rediscovery, not a candidate novel element.
+-- usage: bench/art-annotate FAMILIES.tsv REPS.fa CMSCAN.tbl ARAGORN.txt [CRISPR.tsv]
 
-local function main(fam_path, reps_path, tbl_path, ara_path)
+local function main(fam_path, reps_path, tbl_path, ara_path, crispr_path)
 	local locus = {}
 	for line in io.lines(reps_path) do
 		local fam, loc = line:match("^>(%d+)|(%S+)")
@@ -35,11 +38,20 @@ local function main(fam_path, reps_path, tbl_path, ara_path)
 			if n then genes[cur] = tonumber(n) end
 		end
 	end
+	local crispr = {}
+	if crispr_path then
+		for line in io.lines(crispr_path) do
+			local fam = tonumber(line:match("^(%d+)|"))
+			if fam then crispr[fam] = (crispr[fam] or 0) + 1 end
+		end
+	end
 	for line in io.lines(fam_path) do
 		local fam = tonumber(line:match("^(%d+)\t"))
 		local b = best[fam]
-		print(table.concat({ line, locus[fam] or "-", b and b.name or "-", b and b.text or "-", tostring(genes[fam] or 0) }, "\t"))
+		local cols = { line, locus[fam] or "-", b and b.name or "-", b and b.text or "-", tostring(genes[fam] or 0) }
+		if crispr_path then cols[#cols + 1] = tostring(crispr[fam] or 0) end
+		print(table.concat(cols, "\t"))
 	end
 end
 
-main(assert(arg[1], "usage: art-annotate FAMILIES.tsv REPS.fa CMSCAN.tbl ARAGORN.txt"), assert(arg[2]), assert(arg[3]), assert(arg[4]))
+main(assert(arg[1], "usage: art-annotate FAMILIES.tsv REPS.fa CMSCAN.tbl ARAGORN.txt [CRISPR.tsv]"), assert(arg[2]), assert(arg[3]), assert(arg[4]), arg[5])
