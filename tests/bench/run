@@ -154,4 +154,19 @@ phB 20001 near 6001 2e-9 0.00
 phC 5001 none - - 0.50
 phA 60001 none - - 0.00"
 
+# bench/art-cluster groups census rows by repeat similarity on either strand: a repeat, a
+# one-mismatch variant and its reverse complement form one family; an unrelated repeat its
+# own. Families report members, genomes, RT-upstream members and known-ART similarity.
+ak="$pdir/ak"
+mkdir -p "$ak"
+a=ATTATATGAATACGTATAATGA
+b=ATTATATGAATACCTATAATGA   # one mismatch
+rc=TCATTATACGTATTCATATAAT  # reverse complement of a
+u=GGCCTTAGCACGGTCCAAGCTT   # unrelated
+printf 'g1\t1\t900\t5\t22\t%s\tp\tupstream\t300\t1e-20\t0.00\ng2\t1\t900\t4\t22\t%s\tp\tnone\t-\t-\t0.00\ng3\t1\t900\t3\t22\t%s\tp\tnear\t-9000\t1e-9\t0.10\ng4\t1\t900\t3\t22\t%s\tp\tnone\t-\t-\t0.90\n' "$a" "$b" "$rc" "$u" >"$ak/census.tsv"
+printf 'MarsHill\tATATGAATACGTATAAT\n' >"$ak/known.tsv"
+got=$(luajit bench/art-cluster "$ak/census.tsv" "$ak/known.tsv" 2>&1 | cut -f1-5 | tr '\t' ' ')
+check art-cluster "$got" "1 3 3 1 MarsHill
+2 1 1 0 -"
+
 exit "$fails"

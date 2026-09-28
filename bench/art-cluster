@@ -1,0 +1,148 @@
+#!/usr/bin/env luajit
+-- Repeat families across an ART census (bench/art-census census.tsv): arrays whose consensus
+-- repeats are similar on either strand are joined into one family (single linkage).
+-- Similarity is containment identity: the shorter repeat aligned inside the longer (free end
+-- gaps in the longer), (shorter length - edits) / shorter length, joined at >= MIN_IDENTITY.
+-- Candidate pairs share a canonical 8-mer (an inverted index), so unrelated repeats are never
+-- aligned. Families are ranked by members and report genomes, members whose array lies
+-- upstream of an RT, the best-matching known repeat (KNOWN.tsv: name, repeat), mean coding
+-- fraction and a representative repeat.
+-- usage: bench/art-cluster CENSUS.tsv [KNOWN.tsv]
+-- complexity: O(P * L^2) for P candidate pairs of repeats up to L bases.
+
+local MIN_IDENTITY = 0.8
+local K = 8
+local MIN_OVERLAP = 12
+
+local COMP = { A = "T", C = "G", G = "C", T = "A" }
+local function revcomp(s)
+	return (s:reverse():gsub(".", function(c) return COMP[c] or "N" end))
+end
+
+-- Fewest edits placing all of `short` inside `long` (semi-global: free end gaps in `long`).
+local function fit_edits(short, long)
+	local m, n = #short, #long
+	local prev, cur = {}, {}
+	for j = 0, n do prev[j] = 0 end
+	for i = 1, m do
+		cur[0] = i
+		local a = short:byte(i)
+		for j = 1, n do
+			local v = prev[j - 1] + (a == long:byte(j) and 0 or 1)
+			if prev[j] + 1 < v then v = prev[j] + 1 end
+			if cur[j - 1] + 1 < v then v = cur[j - 1] + 1 end
+			cur[j] = v
+		end
+		prev, cur = cur, prev
+	end
+	local best = math.huge
+	for j = 0, n do if prev[j] < best then best = prev[j] end end
+	return best
+end
+
+-- Containment identity on the better strand.
+local function identity(x, y)
+	if #x > #y then x, y = y, x end
+	if #x < MIN_OVERLAP then return 0 end
+	local e = math.min(fit_edits(x, y), fit_edits(revcomp(x), y))
+	return (#x - e) / #x
+end
+
+local function kmers(s)
+	local set = {}
+	for i = 1, #s - K + 1 do
+		local w = s:sub(i, i + K - 1)
+		local r = revcomp(w)
+		set[w < r and w or r] = true
+	end
+	return set
+end
+
+local function split(line)
+	local f = {}
+	for x in (line .. "\t"):gmatch("([^\t]*)\t") do f[#f + 1] = x end
+	return f
+end
+
+local function main(census_path, known_path)
+	local rows = {}
+	for line in io.lines(census_path) do
+		local f = split(line)
+		rows[#rows + 1] = { rec = f[1], unit = f[6]:upper(), rel = f[8], coding = tonumber(f[11]) or 0, copies = tonumber(f[4]) }
+	end
+	local known = {}
+	if known_path then
+		for line in io.lines(known_path) do
+			local f = split(line)
+			if f[1] ~= "" and f[1]:sub(1, 1) ~= "#" then known[#known + 1] = { name = f[1], unit = f[2]:upper() } end
+		end
+	end
+	-- Union-find over rows.
+	local parent = {}
+	for i = 1, #rows do parent[i] = i end
+	local function find(i)
+		while parent[i] ~= i do parent[i] = parent[parent[i]]; i = parent[i] end
+		return i
+	end
+	-- Inverted index: canonical 8-mer -> rows; identical repeats are compared once.
+	local index, seen_unit = {}, {}
+	for i, r in ipairs(rows) do
+		local first = seen_unit[r.unit]
+		if first then
+			parent[find(i)] = find(first)
+		else
+			seen_unit[r.unit] = i
+			for w in pairs(kmers(r.unit)) do
+				index[w] = index[w] or {}
+				table.insert(index[w], i)
+			end
+		end
+	end
+	local tried = {}
+	for _, list in pairs(index) do
+		for x = 1, #list do
+			for y = x + 1, #list do
+				local i, j = list[x], list[y]
+				local key = i * 1000003 + j
+				if not tried[key] and find(i) ~= find(j) then
+					tried[key] = true
+					if identity(rows[i].unit, rows[j].unit) >= MIN_IDENTITY then parent[find(i)] = find(j) end
+				end
+			end
+		end
+	end
+	-- Families.
+	local fams, order = {}, {}
+	for i, r in ipairs(rows) do
+		local root = find(i)
+		local fam = fams[root]
+		if not fam then
+			fam = { members = {}, genomes = {}, ngenomes = 0, up = 0, coding = 0 }
+			fams[root] = fam
+			order[#order + 1] = fam
+		end
+		table.insert(fam.members, r)
+		if not fam.genomes[r.rec] then fam.genomes[r.rec] = true; fam.ngenomes = fam.ngenomes + 1 end
+		if r.rel == "upstream" then fam.up = fam.up + 1 end
+		fam.coding = fam.coding + r.coding
+	end
+	table.sort(order, function(a, b)
+		if #a.members ~= #b.members then return #a.members > #b.members end
+		return a.members[1].unit < b.members[1].unit
+	end)
+	for n, fam in ipairs(order) do
+		local label, best = "-", MIN_IDENTITY
+		for _, k in ipairs(known) do
+			for _, r in ipairs(fam.members) do
+				local id = identity(k.unit, r.unit)
+				if id >= best then label, best = k.name, id end
+			end
+		end
+		-- Representative: the member with the most copies.
+		local rep = fam.members[1]
+		for _, r in ipairs(fam.members) do if r.copies > rep.copies then rep = r end end
+		print(table.concat({ n, #fam.members, fam.ngenomes, fam.up, label, string.format("%.2f", fam.coding / #fam.members), rep.unit }, "\t"))
+	end
+end
+
+main(assert(arg[1], "usage: art-cluster CENSUS.tsv [KNOWN.tsv]"), arg[2])

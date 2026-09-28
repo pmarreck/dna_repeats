@@ -1,0 +1,5 @@
+# name	repeat	(source)
+Staph_ART	TATAATTAATTTATAGACATTATATGAATACGTATAAT	(dna-repeats --art consensus in MarsHill MW248466.1; the clade core ATATGAATACGTAT is in all 7 Staphylococcus ART arrays)
+L0050_a	CATGTGTATCGCATGT	(Yoon et al. 2026, Fig. 1E, Logan contig L0050)
+L0050_b	CATGTGTTTCGCATGT	(Yoon et al. 2026, Fig. 1E, Logan contig L0050)
+LPJP1_candidate	TTGATTAGTGACGATTACATCACATATTAATCATT	(dna-repeats census: array 518 bp upstream of the second RT of Listeria phage LPJP1 MZ422438.1; not reported by the paper)
