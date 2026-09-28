@@ -6,6 +6,7 @@ const Allocator = std.mem.Allocator;
 const c = @import("pcre2_c");
 const ch = @import("pcre2_capture_history");
 const fam = @import("families.zig");
+const kmer_scan = @import("kmer_scan.zig");
 
 const Api = ch.Api(8);
 
@@ -240,6 +241,13 @@ pub fn candidateStarts(gpa: Allocator, subject: []const u8, min_len: usize, max_
     return starts.toOwnedSlice(gpa);
 }
 
+/// Candidate starts in [from, until): the pure-Zig k-mer scan for units up to
+/// `kmer_scan.max_len` bases, the PCRE2 existence scan (the reference) beyond.
+fn scanStarts(gpa: Allocator, subject: []const u8, len: usize, gap: usize, from: usize, until: usize, out: *std.ArrayList(usize)) Error!void {
+    if (len <= kmer_scan.max_len) return kmer_scan.scan(gpa, subject, len, gap, from, until, out);
+    return regexScanStarts(gpa, subject, len, gap, from, until, out);
+}
+
 /// Append every offset in [from, until) where a length-`len` unit has a copy within
 /// `gap` bases after it, using one unanchored scan over `subject`.
 /// The pattern only asks whether one copy exists (no capture history, no chain), so
@@ -247,7 +255,7 @@ pub fn candidateStarts(gpa: Allocator, subject: []const u8, min_len: usize, max_
 /// the whole chain per start was quadratic. It matches exactly where the chain pattern
 /// does, since that pattern's `++` requires at least one copy.
 /// complexity: O((until - from) * gap) attempts, each an O(len) backreference compare.
-fn scanStarts(gpa: Allocator, subject: []const u8, len: usize, gap: usize, from_start: usize, until: usize, out: *std.ArrayList(usize)) Error!void {
+fn regexScanStarts(gpa: Allocator, subject: []const u8, len: usize, gap: usize, from_start: usize, until: usize, out: *std.ArrayList(usize)) Error!void {
     var buf: [96]u8 = undefined;
     const pattern = std.fmt.bufPrint(&buf, "(?s)(?=([ACGT]{{{d}}}).{{0,{d}}}?\\1)", .{ len, gap }) catch return error.Compile;
     var err: c_int = 0;
@@ -556,4 +564,76 @@ test "finder equals the chain_packing oracle on every small subject" {
             }
         }
     }
+}
+
+/// The k-mer scan's starts over [from, until), for differential tests against the regex.
+fn kmerStarts(subject: []const u8, len: usize, gap: usize, from: usize, until: usize) ![]usize {
+    var out: std.ArrayList(usize) = .empty;
+    errdefer out.deinit(testing.allocator);
+    try kmer_scan.scan(testing.allocator, subject, len, gap, from, until, &out);
+    return out.toOwnedSlice(testing.allocator);
+}
+
+fn regexStarts(subject: []const u8, len: usize, gap: usize, from: usize, until: usize) ![]usize {
+    var out: std.ArrayList(usize) = .empty;
+    errdefer out.deinit(testing.allocator);
+    try regexScanStarts(testing.allocator, subject, len, gap, from, until, &out);
+    return out.toOwnedSlice(testing.allocator);
+}
+
+test "k-mer scan equals the regex existence scan on every {A,C,N} subject up to 7 bases" {
+    var subject: [7]u8 = undefined;
+    for (1..subject.len + 1) |n| {
+        var x: usize = 0;
+        while (x < std.math.pow(usize, 3, n)) : (x += 1) {
+            var y = x;
+            for (subject[0..n]) |*b| {
+                b.* = "ACN"[y % 3];
+                y /= 3;
+            }
+            for ([_][2]usize{ .{ 1, 0 }, .{ 1, 2 }, .{ 2, 0 }, .{ 2, 1 }, .{ 2, 3 }, .{ 3, 1 } }) |lg| {
+                for ([_][2]usize{ .{ 0, n }, .{ 1, n -| 1 } }) |range| {
+                    const want = try regexStarts(subject[0..n], lg[0], lg[1], range[0], range[1]);
+                    defer testing.allocator.free(want);
+                    const got = try kmerStarts(subject[0..n], lg[0], lg[1], range[0], range[1]);
+                    defer testing.allocator.free(got);
+                    try testing.expectEqualSlices(usize, want, got);
+                }
+            }
+        }
+    }
+}
+
+test "k-mer scan equals the regex existence scan on long ACGTN subjects at real lengths and gaps" {
+    var buf: [3000]u8 = undefined;
+    for ([_]u64{ 3, 11, 123 }) |seed| {
+        const subject = lcgSubject(&buf, seed);
+        // Sprinkle N so some k-mers are not units.
+        var s: u64 = seed;
+        for (subject) |*b| {
+            s = s * 16807 % 2147483647;
+            if (s % 97 == 0) b.* = 'N';
+        }
+        for ([_]usize{ 1, 8, 18, 31 }) |len| {
+            for ([_]usize{ 0, 5, 93, 400 }) |gap| {
+                for ([_][2]usize{ .{ 0, subject.len }, .{ 777, 2100 } }) |range| {
+                    const want = try regexStarts(subject, len, gap, range[0], range[1]);
+                    defer testing.allocator.free(want);
+                    const got = try kmerStarts(subject, len, gap, range[0], range[1]);
+                    defer testing.allocator.free(got);
+                    try testing.expectEqualSlices(usize, want, got);
+                }
+            }
+        }
+    }
+}
+
+test "k-mer scan finds tandem runs: every start of poly-A whose copy fits" {
+    const subject = "A" ** 40;
+    const want = try regexStarts(subject, 18, 5, 0, subject.len);
+    defer testing.allocator.free(want);
+    const got = try kmerStarts(subject, 18, 5, 0, subject.len);
+    defer testing.allocator.free(got);
+    try testing.expectEqualSlices(usize, want, got);
+    try testing.expectEqual(@as(usize, 40 - 2 * 18 + 1), got.len);
 }
