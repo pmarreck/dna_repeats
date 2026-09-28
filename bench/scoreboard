@@ -57,6 +57,8 @@ predict_pilercr() {
 }
 # Array calling with the CRISPR preset.
 predict_dnarepeats() { "$dnarepeats" --no-progress --crispr "$1" | awk -F'\t' '{print $1 "\t" $2 "\t" $3 "\t" $6}'; }
+# The CRISPR preset on one thread (the opponents are single-threaded).
+predict_dnarepeats_1t() { "$dnarepeats" --no-progress --crispr -j 1 "$1" | awk -F'\t' '{print $1 "\t" $2 "\t" $3 "\t" $6}'; }
 # The --sensitive preset: seeds from 14 bases for degraded arrays.
 predict_dnarepeats_sensitive() { "$dnarepeats" --no-progress --crispr --sensitive "$1" | awk -F'\t' '{print $1 "\t" $2 "\t" $3 "\t" $6}'; }
 # Naive baseline: every family of >= 3 exact copies is one region (step 3 replaces this).
