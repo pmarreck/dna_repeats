@@ -106,8 +106,9 @@ for tool in "${tools[@]}"; do
 	score=$(tail -1 "$work/score")
 	dr=$(grep '^DR' "$work/score")
 	drn=$(sed 's/.*scored=\([0-9]*\).*/\1/' <<<"$dr"); drx=$(sed 's/.*exact=\([0-9]*\).*/\1/' <<<"$dr"); dre=$(sed 's/.*edit=\([0-9]*\).*/\1/' <<<"$dr")
-	el4=$(sed 's/.*el4=\([0-9]*\).*/\1/' <<<"$score"); rec=$(sed 's/.*recalled=\([0-9]*\).*/\1/' <<<"$score")
-	pred=$(sed 's/.*predictions=\([0-9]*\).*/\1/' <<<"$score"); cor=$(sed 's/.*correct=\([0-9]*\).*/\1/' <<<"$score")
+	field() { tr '\t' '\n' <<<"$2" | sed -n "s/^$1=//p"; } # by exact name: el4 is also a suffix of correct_el4
+	el4=$(field el4 "$score"); rec=$(field recalled "$score")
+	pred=$(field predictions "$score"); cor=$(field correct "$score"); cor4=$(field correct_el4 "$score")
 	printf '%-16s %5d/%-3d %7.1f%% %9d %8.1f%% %9.2f %10.1f %9.1f%%%s\n' "$tool" "$rec" "$el4" \
 		"$(awk -v a="$rec" -v b="$el4" 'BEGIN {print b ? 100 * a / b : 0}')" "$pred" \
 		"$(awk -v a="$cor" -v b="$pred" 'BEGIN {print b ? 100 * a / b : 0}')" "$wall" "$(awk -v k="$peak" 'BEGIN {print k / 1024}')" \
@@ -115,9 +116,9 @@ for tool in "${tools[@]}"; do
 		"$([ "$failures" -eq 0 ] || printf '  FAILED on %d genomes' "$failures")"
 	jq -cn --arg commit "$commit" --argjson dirty "$dirty" --arg when "$when" --arg machine "$machine" --arg set "$set" \
 		--arg tool "$tool" --arg tool_path "$tool_path" --arg input_sha256 "$input_sha256" \
-		--argjson el4 "$el4" --argjson recalled "$rec" --argjson predictions "$pred" --argjson correct "$cor" \
+		--argjson el4 "$el4" --argjson recalled "$rec" --argjson predictions "$pred" --argjson correct "$cor" --argjson correct_el4 "$cor4" \
 		--argjson wall_s "$wall" --argjson peak_kb "$peak" --argjson failures "$failures" \
 		--argjson cpus "$cpus" --argjson dr_scored "$drn" --argjson dr_exact "$drx" --argjson dr_edit "$dre" \
-		'{commit: $commit, dirty: $dirty, when: $when, machine: $machine, cpus: $cpus, set: $set, tool: $tool, tool_path: $tool_path, input_sha256: $input_sha256, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, wall_s: $wall_s, peak_kb: $peak_kb, failures: $failures, dr_scored: $dr_scored, dr_exact: $dr_exact, dr_edit: $dr_edit}' >>"$log"
+		'{commit: $commit, dirty: $dirty, when: $when, machine: $machine, cpus: $cpus, set: $set, tool: $tool, tool_path: $tool_path, input_sha256: $input_sha256, el4: $el4, recalled: $recalled, predictions: $predictions, correct: $correct, correct_el4: $correct_el4, wall_s: $wall_s, peak_kb: $peak_kb, failures: $failures, dr_scored: $dr_scored, dr_exact: $dr_exact, dr_edit: $dr_edit}' >>"$log"
 done
 exit "$status"

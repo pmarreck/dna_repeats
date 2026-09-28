@@ -15,27 +15,27 @@ truth=$'A\torg\t101\t100\t1\t4\tDR\nA\torg\t501\t100\t1\t1\tDR\nA\torg\t1001\t10
 #  B has no predictions, so its level-4 array is missed.
 preds=$'A\t120\t210\nA\t520\t530\nA\t2000\t2100\nA\t1001\t1040'
 got=$(${AWK:-awk} -f bench/score.awk <(printf '%s\n' "$truth") <(printf '%s\n' "$preds") | tail -1)
-check totals "$got" $'TOTAL\tel4=3\trecalled=1\tpredictions=4\tcorrect=3'
+check totals "$got" $'TOTAL\tel4=3\trecalled=1\tpredictions=4\tcorrect=3\tcorrect_el4=2'
 
 got=$(${AWK:-awk} -f bench/score.awk <(printf '%s\n' "$truth") <(printf '%s\n' "$preds") | head -1)
-check per-accession "$got" $'A\tel4=2\trecalled=1\tpredictions=4\tcorrect=3'
+check per-accession "$got" $'A\tel4=2\trecalled=1\tpredictions=4\tcorrect=3\tcorrect_el4=2'
 
 # Two predictions each covering half of one array jointly recall it (coverage is a union).
 got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tDR\n') <(printf 'C\t1\t50\nC\t51\t100\n') | tail -1)
-check union-coverage "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=2\tcorrect=2'
+check union-coverage "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=2\tcorrect=2\tcorrect_el4=2'
 
 # Overlapping predictions do not double-count coverage: 1-40 twice is 40%, not 80%.
 got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tDR\n') <(printf 'C\t1\t40\nC\t1\t40\n') | tail -1)
-check no-double-count "$got" $'TOTAL\tel4=1\trecalled=0\tpredictions=2\tcorrect=2'
+check no-double-count "$got" $'TOTAL\tel4=1\trecalled=0\tpredictions=2\tcorrect=2\tcorrect_el4=2'
 
 # Precision takes the union of truth coverage too: two truth rows over the same 40 bases of
 # a 100-base prediction put 40%, not 80%, of it inside truth (wrong).
 got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t40\t1\t4\tDR\nC\to\t1\t40\t1\t1\tDR\n') <(printf 'C\t1\t100\n') | tail -1)
-check precision-union "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=1\tcorrect=0'
+check precision-union "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=1\tcorrect=0\tcorrect_el4=0'
 
 # Predictions on a sequence with no truth rows are wrong, not ignored (negative controls rely on it).
 got=$(${AWK:-awk} -f bench/score.awk <(printf 'C\to\t1\t100\t1\t4\tDR\n') <(printf 'C\t1\t100\nZ\t5\t50\n') | tail -1)
-check truthless-predictions-count "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=2\tcorrect=1'
+check truthless-predictions-count "$got" $'TOTAL\tel4=1\trecalled=1\tpredictions=2\tcorrect=1\tcorrect_el4=1'
 
 # Repeat (DR) accuracy: a prediction with a 4th column (its unit) that overlaps a truth array
 # with a DR is scored by Levenshtein distance to that DR on the closer strand.
@@ -59,11 +59,11 @@ check shuffle-deterministic "$one" "$two"
 
 # No truth and no predictions (a clean negative control) still yields numeric totals.
 got=$(${AWK:-awk} -f bench/score.awk /dev/null /dev/null | tail -1)
-check empty-inputs-numeric "$got" $'TOTAL\tel4=0\trecalled=0\tpredictions=0\tcorrect=0'
+check empty-inputs-numeric "$got" $'TOTAL\tel4=0\trecalled=0\tpredictions=0\tcorrect=0\tcorrect_el4=0'
 
 # An empty truth file must not make the predictions be read as truth (FNR == NR trap).
 got=$(${AWK:-awk} -f bench/score.awk /dev/null <(printf 'Z\t5\t50\n') | tail -1)
-check empty-truth-predictions-are-wrong "$got" $'TOTAL\tel4=0\trecalled=0\tpredictions=1\tcorrect=0'
+check empty-truth-predictions-are-wrong "$got" $'TOTAL\tel4=0\trecalled=0\tpredictions=1\tcorrect=0\tcorrect_el4=0'
 
 # bench/plant-arrays SEED N_ARRAYS RATE_PERCENT OUT_PREFIX: FASTA plus CRISPRCasdb-style truth.
 pdir=$(mktemp -d "${TMPDIR:-/tmp}/plant-test.XXXXXX") || exit 1
@@ -97,6 +97,7 @@ sbrun() { DNAREPEATS_BIN="$sb/$1" SCOREBOARD_LOG="$sb/log" bash bench/scoreboard
 sbrun good
 check scoreboard-good-exit "$?" 0
 check scoreboard-good-recall "$(jq -r '"\(.recalled)/\(.el4) \(.failures)"' "$sb/log")" "2/2 0"
+check scoreboard-strict-precision "$(jq -r '"\(.correct) \(.correct_el4)"' "$sb/log")" "2 2"
 check scoreboard-dr-accuracy "$(jq -r '"\(.dr_scored) \(.dr_exact) \(.dr_edit)"' "$sb/log")" "2 1 1"
 check scoreboard-tool-path "$(jq -r .tool_path "$sb/log")" "$sb/good"
 check scoreboard-input-checksum "$(jq -r .input_sha256 "$sb/log" | grep -cE '^[0-9a-f]{64}$')" 1

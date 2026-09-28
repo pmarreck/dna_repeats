@@ -4,7 +4,8 @@
 #   PREDICTIONS: accession, start, end (1-based, inclusive)[, repeat unit]
 # Recall: a level-4 array is recalled when the union of predictions covers >= half its bases.
 # Precision: a prediction is correct when >= half its bases lie inside the union of truth arrays
-# (any evidence level, so finding a lower-evidence candidate is not penalized).
+# (any evidence level, so finding a lower-evidence candidate is not penalized); correct_el4
+# is the same test against level-4 (curated) arrays only, the set recall uses.
 # Repeat accuracy: a prediction with a unit overlapping a truth array with a DR scores its
 # Levenshtein distance to that DR on the closer strand.
 # Output: one line per truth accession (sorted), then DR (scored, exact, summed edit), then TOTAL.
@@ -47,7 +48,7 @@ END {
 	# insertion sort keeps this portable across awks
 	for (i = 2; i <= na; i++) { v = order[i]; for (j = i - 1; j > 0 && order[j] > v; j--) order[j + 1] = order[j]; order[j + 1] = v }
 	for (k = 1; k <= na; k++) {
-		acc = order[k]; el4 = 0; recalled = 0; correct = 0
+		acc = order[k]; el4 = 0; recalled = 0; correct = 0; correct4 = 0
 		for (t = 1; t <= nt[acc]; t++) {
 			if (tel[acc, t] != 4) continue
 			el4++
@@ -61,14 +62,16 @@ END {
 			if (c >= MIN_FRACTION * (te[acc, t] - ts[acc, t] + 1)) recalled++
 		}
 		for (p = 1; p <= np[acc]; p++) {
-			split("", covered) # union of truth bases inside the prediction, each counted once
+			split("", covered); split("", covered4) # union of truth bases inside the prediction
 			for (t = 1; t <= nt[acc]; t++) {
 				lo = ps[acc, p] > ts[acc, t] ? ps[acc, p] : ts[acc, t]
 				hi = pe[acc, p] < te[acc, t] ? pe[acc, p] : te[acc, t]
-				for (x = lo; x <= hi; x++) covered[x] = 1
+				for (x = lo; x <= hi; x++) { covered[x] = 1; if (tel[acc, t] == 4) covered4[x] = 1 }
 			}
 			inside = 0; for (x in covered) inside++
+			inside4 = 0; for (x in covered4) inside4++
 			if (inside >= MIN_FRACTION * (pe[acc, p] - ps[acc, p] + 1)) correct++
+			if (inside4 >= MIN_FRACTION * (pe[acc, p] - ps[acc, p] + 1)) correct4++
 			# Repeat accuracy against the first overlapping truth array that has a DR.
 			if (pu[acc, p] != "") for (t = 1; t <= nt[acc]; t++) {
 				if (tdr[acc, t] == "" || !overlap(ps[acc, p], pe[acc, p], ts[acc, t], te[acc, t])) continue
@@ -78,9 +81,9 @@ END {
 				break
 			}
 		}
-		print acc, "el4=" el4, "recalled=" recalled, "predictions=" (np[acc] + 0), "correct=" correct
-		T_el4 += el4; T_rec += recalled; T_pred += np[acc]; T_cor += correct
+		print acc, "el4=" el4, "recalled=" recalled, "predictions=" (np[acc] + 0), "correct=" correct, "correct_el4=" correct4
+		T_el4 += el4; T_rec += recalled; T_pred += np[acc]; T_cor += correct; T_cor4 += correct4
 	}
 	print "DR", "scored=" (T_dr + 0), "exact=" (T_dr_exact + 0), "edit=" (T_dr_edit + 0)
-	print "TOTAL", "el4=" (T_el4 + 0), "recalled=" (T_rec + 0), "predictions=" (T_pred + 0), "correct=" (T_cor + 0)
+	print "TOTAL", "el4=" (T_el4 + 0), "recalled=" (T_rec + 0), "predictions=" (T_pred + 0), "correct=" (T_cor + 0), "correct_el4=" (T_cor4 + 0)
 }
