@@ -238,4 +238,56 @@ got=$(PATH="$ce/bin:$PATH" IN_NIX_SHELL=1 DNAREPEATS_BIN="$ce/bin/dna-repeats" P
 check art-census-no-rt-exit "$?" 0
 check art-census-no-rt-summary "$got" "arrays: 1 (non-coding: 1); RT upstream (ART-like arrangement): 0; RT near: 0"
 
+# art-context: proteins within 8 kb of each family member (ids), and per family the fraction of
+# members with each Pfam domain on such a protein (tally). A gene outside every window counts
+# for no family; a gene seen through two overlapping windows is scanned once.
+cx="$pdir/cx"
+mkdir -p "$cx"
+printf '1\tg1\t9600\t9800\t3\n1\tg2\t2000\t2200\t3\n2\tg1\t18000\t18200\t4\n' >"$cx/members.tsv"
+{
+	printf 'g1__1__20000\tp\tCDS\t100\t400\t.\t+\t0\tx\n'
+	printf 'g1__1__20000\tp\tCDS\t9000\t9500\t.\t+\t0\tx\n'
+	printf 'g1__1__20000\tp\tCDS\t19000\t19900\t.\t-\t0\tx\n'
+	printf 'g1__8001__30000\tp\tCDS\t11000\t11900\t.\t-\t0\tx\n'
+	printf 'g2__1__5000\tp\tCDS\t1000\t1500\t.\t+\t0\tx\n'
+} >"$cx/genes.gff"
+check art-context-ids "$(luajit bench/art-context ids "$cx/members.tsv" "$cx/genes.gff" | tr '\n' ' ')" \
+	"g1__1__20000_2 g1__1__20000_3 g2__1__5000_1 "
+{
+	echo '# target name accession query name'
+	echo 'RVT_1  PF00078.33  g1__1__20000_2  -  1e-30  100.0'
+	echo 'HTH_3  PF01381.28  g2__1__5000_1   -  1e-10  40.0'
+	echo 'HTH_3  PF01381.28  g1__8001__30000_1  -  1e-10  40.0'
+	echo 'Phage_integrase  PF00589.28  g1__1__20000_1  -  1e-20  70.0'
+} >"$cx/pfam.tbl"
+check art-context-tally "$(luajit bench/art-context tally "$cx/members.tsv" "$cx/genes.gff" "$cx/pfam.tbl")" \
+	"$(printf '1\t2\tHTH_3\t1\t0.50\n1\t2\tRVT_1\t1\t0.50\n2\t1\tHTH_3\t1\t1.00')"
+
+# shuffle-fasta-di: a dinucleotide-preserving shuffle (Altschul-Erickson). Every record keeps
+# its header, length, first and last base and exact dinucleotide counts (counted here by an
+# independent awk), is deterministic for a seed, and differs from its input.
+di="$pdir/di"
+mkdir -p "$di"
+bash bench/plant-arrays 5 4 0 "$di/p" >/dev/null 2>&1
+printf '>tiny\nAC\n>one\nG\n' >>"$di/p.fa"
+luajit bench/shuffle-fasta-di 7 <"$di/p.fa" >"$di/s1.fa"
+luajit bench/shuffle-fasta-di 7 <"$di/p.fa" >"$di/s2.fa"
+luajit bench/shuffle-fasta-di 8 <"$di/p.fa" >"$di/s3.fa"
+profile() { # per record: header, length, first, last, sorted dinucleotide counts
+	awk '/^>/ {if (h) out(); h = $0; s = ""; next} {s = s toupper($0)} END {out()}
+		function out(   i, d, k, line) { delete c; for (i = 1; i < length(s); i++) c[substr(s, i, 2)]++
+			line = h " " length(s) " " substr(s, 1, 1) substr(s, length(s), 1)
+			n = asorti(c, k); for (i = 1; i <= n; i++) line = line " " k[i] "=" c[k[i]]; print line }' "$1"
+}
+# Every seed of 1..8: a broken Eulerian walk fails on some seeds and survives others by luck.
+want=$(profile "$di/p.fa")
+bad=
+for seed in 1 2 3 4 5 6 7 8; do
+	[ "$(luajit bench/shuffle-fasta-di "$seed" <"$di/p.fa" 2>&1 | profile /dev/stdin)" = "$want" ] || bad="$bad $seed"
+done
+check di-profile-all-seeds "$bad" ""
+check di-deterministic "$(sha256sum <"$di/s1.fa")" "$(sha256sum <"$di/s2.fa")"
+check di-seed-matters "$([ "$(sha256sum <"$di/s1.fa")" != "$(sha256sum <"$di/s3.fa")" ] && echo differ)" differ
+check di-changes-sequence "$([ "$(grep -v '^>' "$di/s1.fa" | tr -d '\n')" != "$(grep -v '^>' "$di/p.fa" | tr -d '\n' | tr a-z A-Z)" ] && echo differ)" differ
+
 exit "$fails"

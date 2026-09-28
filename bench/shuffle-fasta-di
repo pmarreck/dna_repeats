@@ -1,0 +1,88 @@
+#!/usr/bin/env luajit
+-- Negative-control input that keeps local composition: shuffle each FASTA record preserving its
+-- exact dinucleotide counts and first and last base (Altschul & Erickson 1985), so AT-rich
+-- stretches and dinucleotide biases survive while real repeats are destroyed. A stricter null
+-- than bench/shuffle-fasta (mononucleotide). Technique: the record is an Eulerian walk over the
+-- base graph (one edge per adjacent pair); a random arborescence rooted at the last base is
+-- drawn with Wilson's algorithm (loop-erased random walks), each base's other out-edges are
+-- shuffled and its tree edge placed last, and the walk from the first base then uses every
+-- edge exactly once (Kandel et al. 1996). Bases are uppercased; lines wrap at 60.
+-- usage: bench/shuffle-fasta-di SEED < in.fa > out.fa   (deterministic for a seed)
+-- complexity: O(n) per record of n bases (expected, for Wilson's algorithm on <= 256 vertices).
+
+local seed = assert(tonumber(arg[1]), "usage: shuffle-fasta-di SEED < in.fa > out.fa")
+local state = seed % 2147483646 + 1
+-- Park-Miller minimal standard generator; exact in doubles, the same on every platform.
+local function rand(n)
+	state = (state * 16807) % 2147483647
+	return 1 + state % n
+end
+
+local function shuffle(s)
+	local n = #s
+	if n < 3 then return s end
+	local out = {} -- vertex byte -> list of successor bytes
+	for i = 1, n - 1 do
+		local a = s:byte(i)
+		local l = out[a]
+		if not l then l = {}; out[a] = l end
+		l[#l + 1] = s:byte(i + 1)
+	end
+	local last = s:byte(n)
+	local intree, nxt = { [last] = true }, {}
+	local vertices = {}
+	for v in pairs(out) do vertices[#vertices + 1] = v end
+	table.sort(vertices) -- pairs() order is not deterministic across runs
+	for _, start in ipairs(vertices) do
+		local u = start
+		while not intree[u] do
+			local l = out[u]
+			local k = rand(#l)
+			nxt[u] = k
+			u = l[k]
+		end
+		u = start
+		while not intree[u] do
+			intree[u] = true
+			u = out[u][nxt[u]]
+		end
+	end
+	for _, v in ipairs(vertices) do
+		local l = out[v]
+		if v ~= last then -- move the tree edge to the end, shuffle the rest
+			local k = nxt[v]
+			l[k], l[#l] = l[#l], l[k]
+		end
+		local m = v ~= last and #l - 1 or #l
+		for i = m, 2, -1 do
+			local j = rand(i)
+			l[i], l[j] = l[j], l[i]
+		end
+	end
+	local pos, res = {}, { string.char(s:byte(1)) }
+	local u = s:byte(1)
+	for i = 2, n do
+		local p = (pos[u] or 0) + 1
+		pos[u] = p
+		u = out[u][p]
+		res[i] = string.char(u)
+	end
+	return table.concat(res)
+end
+
+local header, parts = nil, {}
+local function flush()
+	if not header then return end
+	io.write(header, "\n")
+	local s = shuffle(table.concat(parts):upper())
+	for i = 1, #s, 60 do io.write(s:sub(i, i + 59), "\n") end
+end
+for line in io.lines() do
+	if line:sub(1, 1) == ">" then
+		flush()
+		header, parts = line, {}
+	else
+		parts[#parts + 1] = (line:gsub("%s", ""))
+	end
+end
+flush()

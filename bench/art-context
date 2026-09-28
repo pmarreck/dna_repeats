@@ -1,0 +1,124 @@
+#!/usr/bin/env luajit
+-- Gene context of repeat families: which protein domains recur near a family's arrays.
+-- Genes come from the census windows (bench/art-census genes.gff, windows named
+-- REC__WSTART__WEND), deduplicated across overlapping windows as in bench/art-link; a gene
+-- is near a member when it overlaps the member's array +- 8 kb.
+--   ids: one protein id per gene near any member (sorted), to cut from proteins.faa.
+--   tally: per family, per Pfam domain (hmmscan --tblout on those proteins), how many
+--     members have the domain near them: family, members, domain, count, fraction; ranked by
+--     family, then count, then name.
+-- usage: bench/art-context ids MEMBERS.tsv GENES.gff
+--        bench/art-context tally MEMBERS.tsv GENES.gff PFAM.tbl
+-- complexity: O(M * G) for M members and G genes on their records.
+
+local WINDOW = 8000
+
+local function split(line)
+	local f = {}
+	for x in (line .. "\t"):gmatch("([^\t]*)\t") do f[#f + 1] = x end
+	return f
+end
+
+-- Genes per record in genome coordinates; each keeps every protein id it was called under.
+local function load_genes(path)
+	local genes, seen, index = {}, {}, {}
+	for line in io.lines(path) do
+		if line:sub(1, 1) ~= "#" then
+			local f = split(line)
+			if f[3] == "CDS" then
+				local rec, wstart = f[1]:match("^(.*)__(%d+)__%d+$")
+				assert(rec, "window name is not REC__WSTART__WEND: " .. f[1])
+				index[f[1]] = (index[f[1]] or 0) + 1
+				local lo = tonumber(wstart) + tonumber(f[4]) - 1
+				local hi = tonumber(wstart) + tonumber(f[5]) - 1
+				local key = rec .. ":" .. lo .. ":" .. hi .. ":" .. f[7]
+				local g = seen[key]
+				if not g then
+					g = { lo = lo, hi = hi, ids = {} }
+					seen[key] = g
+					genes[rec] = genes[rec] or {}
+					table.insert(genes[rec], g)
+				end
+				table.insert(g.ids, f[1] .. "_" .. index[f[1]])
+			end
+		end
+	end
+	return genes
+end
+
+local function members(path)
+	local out = {}
+	for line in io.lines(path) do
+		local f = split(line)
+		out[#out + 1] = { fam = tonumber(f[1]), rec = f[2], s = tonumber(f[3]), e = tonumber(f[4]) }
+	end
+	return out
+end
+
+local function near(genes, m)
+	local out = {}
+	for _, g in ipairs(genes[m.rec] or {}) do
+		if g.hi >= m.s - WINDOW and g.lo <= m.e + WINDOW then out[#out + 1] = g end
+	end
+	return out
+end
+
+local function ids(members_path, genes_path)
+	local genes, picked = load_genes(genes_path), {}
+	for _, m in ipairs(members(members_path)) do
+		for _, g in ipairs(near(genes, m)) do picked[g.ids[1]] = true end
+	end
+	local list = {}
+	for id in pairs(picked) do list[#list + 1] = id end
+	table.sort(list)
+	for _, id in ipairs(list) do print(id) end
+end
+
+local function tally(members_path, genes_path, pfam_path)
+	local domains = {}
+	for line in io.lines(pfam_path) do
+		if line:sub(1, 1) ~= "#" then
+			local dom, id = line:match("^(%S+)%s+%S+%s+(%S+)")
+			if dom then
+				domains[id] = domains[id] or {}
+				domains[id][dom] = true
+			end
+		end
+	end
+	local genes = load_genes(genes_path)
+	local fams, size, count = {}, {}, {}
+	for _, m in ipairs(members(members_path)) do
+		if not size[m.fam] then fams[#fams + 1] = m.fam; size[m.fam] = 0; count[m.fam] = {} end
+		size[m.fam] = size[m.fam] + 1
+		local has = {}
+		for _, g in ipairs(near(genes, m)) do
+			for _, id in ipairs(g.ids) do
+				for dom in pairs(domains[id] or {}) do has[dom] = true end
+			end
+		end
+		for dom in pairs(has) do count[m.fam][dom] = (count[m.fam][dom] or 0) + 1 end
+	end
+	table.sort(fams)
+	for _, fam in ipairs(fams) do
+		local rows = {}
+		for dom, n in pairs(count[fam]) do rows[#rows + 1] = { dom = dom, n = n } end
+		table.sort(rows, function(a, b)
+			if a.n ~= b.n then return a.n > b.n end
+			return a.dom < b.dom
+		end)
+		for _, r in ipairs(rows) do
+			print(string.format("%d\t%d\t%s\t%d\t%.2f", fam, size[fam], r.dom, r.n, r.n / size[fam]))
+		end
+	end
+end
+
+local usage = "usage: art-context ids MEMBERS.tsv GENES.gff | art-context tally MEMBERS.tsv GENES.gff PFAM.tbl"
+local mode = arg[1]
+if mode == "ids" then
+	ids(assert(arg[2], usage), assert(arg[3], usage))
+elseif mode == "tally" then
+	tally(assert(arg[2], usage), assert(arg[3], usage), assert(arg[4], usage))
+else
+	io.stderr:write(usage, "\n")
+	os.exit(2)
+end
