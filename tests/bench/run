@@ -67,4 +67,29 @@ check plant-exact-copies-at-rate-0 "$ok" 1
 bash bench/plant-arrays 3 4 0 "$pa.2"
 check plant-deterministic "$(cat "$pa.fa" "$pa.truth.tsv" | sha256sum)" "$(cat "$pa.2.fa" "$pa.2.truth.tsv" | sha256sum)"
 
+# bench/scoreboard on an ad-hoc set with a fake dna-repeats (DNAREPEATS_BIN), logging to
+# SCOREBOARD_LOG: a tool that fails must fail the run loudly, and every log row carries
+# provenance (tool path, input checksum, failure count).
+sb="$pdir/sb"
+mkdir -p "$sb/genomes"
+printf '>g1\nACGT\n' >"$sb/genomes/g1.fa"
+printf '>g2\nACGT\n' >"$sb/genomes/g2.fa"
+printf 'g1\to\t1\t10\t1\t4\tDR\ng2\to\t1\t10\t1\t4\tDR\n' >"$sb/truth.tsv"
+sh=$(command -v bash)
+printf '#!%s\nprintf "%%s\\t1\\t10\\t3\\t4\\tACGT\\t1\\n" "$(basename "${@: -1}" .fa)"\n' "$sh" >"$sb/good"
+printf '#!%s\ncase "$*" in *g2.fa*) echo "boom" >&2; exit 3 ;; esac\nprintf "g1\\t1\\t10\\t3\\t4\\tACGT\\t1\\n"\n' "$sh" >"$sb/bad"
+chmod +x "$sb/good" "$sb/bad"
+sbrun() { DNAREPEATS_BIN="$sb/$1" SCOREBOARD_LOG="$sb/log" bash bench/scoreboard --genomes "$sb/genomes" --truth "$sb/truth.tsv" --label t dnarepeats >"$sb/out" 2>"$sb/err"; }
+sbrun good
+check scoreboard-good-exit "$?" 0
+check scoreboard-good-recall "$(jq -r '"\(.recalled)/\(.el4) \(.failures)"' "$sb/log")" "2/2 0"
+check scoreboard-tool-path "$(jq -r .tool_path "$sb/log")" "$sb/good"
+check scoreboard-input-checksum "$(jq -r .input_sha256 "$sb/log" | grep -cE '^[0-9a-f]{64}$')" 1
+check scoreboard-good-quiet "$(cat "$sb/err")" ""
+sbrun bad
+check scoreboard-bad-exit "$?" 1
+check scoreboard-bad-failures "$(tail -1 "$sb/log" | jq -r .failures)" 1
+check scoreboard-bad-names-genome "$(grep -c 'g2.fa' "$sb/err")" 1
+check scoreboard-bad-shows-tool-stderr "$(grep -c boom "$sb/err")" 1
+
 exit "$fails"

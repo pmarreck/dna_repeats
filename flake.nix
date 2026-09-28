@@ -70,7 +70,7 @@
 				build = self.packages.${system}.default;
 				# CLI surface suite against a Debug build (banner muted), plus the scoreboard scorer's fixtures.
 				cli = nixpkgs.legacyPackages.${system}.runCommand "dna-repeats-cli-tests" {
-					nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bash jq gnugrep gawk coreutils ];
+					nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bash jq gnugrep gawk coreutils time ];
 				} ''
 					MUTE_DEBUG_STATUS=1 bash ${./tests/cli/run} ${package system "debug"}/bin/dna-repeats
 					cd ${self} && bash tests/bench/run
