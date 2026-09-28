@@ -47,3 +47,16 @@ for upstream of RTs.
 - An array counts as recovered when it lies upstream of the annotated RT within 6 kb, as
   in the paper's delimitation window.
 - Negative control: shuffled phage genomes give no arrays.
+
+## Results
+
+- 2026-09-28, preset frozen at commit 714484a (every value from the paper's methods, none
+  fitted): tuning set 3 of 3 arrays found upstream of the RT (MarsHill 5 copies, SA1 3
+  copies where the paper shows 5, Madawaska 5 copies).
+- Held-out set, scored once: 4 of 5 by the rule fixed beforehand. LY01, S6, PALS_2 and
+  UFV_DC4 each have a 5-copy array upstream of the RT (RT located by tblastn with the
+  MarsHill RT). LPJP1 has none: no exact repeat of 10 or more bases recurs three times at
+  array spacing in the 6 kb upstream of its RT. The paper does not report an array for
+  LPJP1 (it names arrays only for the seven Staphylococcus phages, and only 28 of its 95
+  ART RT clusters carry one), so including it was our assumption; among loci where the
+  paper reports an array, 4 of 4. Generalization beyond the Staphylococcus clade is untested.

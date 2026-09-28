@@ -10,8 +10,9 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [x] Public-readiness audit: no private data in any tracked file or commit that is not already public; symlinks are relative; the pcre2 fork is public. (done 2026-09-28 08:30 EDT)
 - [x] Repo public with MIT license, README credits and the tools-first framing (Peter approved wording). (done 2026-09-28 09:13 EDT)
 - [ ] ART (Peter, 2026-09-28): run on the relevant genomes and try to exceed the Anthropic ART preprint. Feasibility: MarsHill (MW248466.1) array found upstream of the RT (5 copies, 14-nt core -> 35-nt consensus) but CRISPR filters reject it (conservation 0.897, spacer 10-mer sharing 0.33); scope questions pending with Peter.
-	- [ ] ART 1: --art preset (repeat 15..49, 100..450 nt spacing, >= 3 copies, thresholds tuned on the tuning set only), TDD with synthetic ART-like arrays (context: intents/art_search.md).
-	- [ ] ART 2: pin the 8 known GenBank ART genomes in nix/benchdata.nix; score the tuning set, then the held-out set once with the preset frozen; shuffled control.
+	- [x] ART 1: --art preset from the paper's parameters (seeds 12, repeats 15..49, 100..450 nt spacing, conservation 0.8, spacer-sharing filter off), TDD. (done 2026-09-28 09:35 EDT, 714484a)
+	- [x] ART 2: tuning 3/3; held-out once 4/5 (LPJP1 has no array we or the paper report; 4/4 where the paper reports one); results in intents/art_search.md. (done 2026-09-28 09:42 EDT)
+	- [ ] ART 2b: pin the 8 genomes in nix/benchdata.nix and add an ART check to bench/verify.
 	- [ ] ART 3: pin INPHARED (all GenBank phage genomes) and scan it; time and memory for the whole collection.
 	- [ ] ART 4: link arrays to RTs: prodigal gene calls near arrays, HMMER with an RT profile built from MarsHill RT homologs as in the paper.
 	- [ ] ART 5: census and repeat clustering (both strands) for repeats the same as or similar to ART repeats; add GPD and MGV; IMG/VR v4.1 when Peter has JGI access.
