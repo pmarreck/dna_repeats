@@ -69,3 +69,10 @@ for upstream of RTs.
   lineage (91-100% identical, 422 aa, domain from residue 64); not ART (no homology to the
   MarsHill RT, normal N-terminus), not the annotated DGR RT; partly overlaps genes (0.37-0.46).
   Co-occurrence may be shared ancestry; RT class not yet assigned (next: myRT references).
+- Family 4 RT class (myRT RVT-All.hmm, mgtools/myRT fa8e362): UG27 (E ~ 1e-115) for all 15;
+  control: the MarsHill ART RT scores closest to retrons (E 1.1e-33), as the paper places it.
+  UG27 RTs in Bacteroidetes/Firmicutes gut viruses with an associated ncRNA are described in
+  Mestre et al. 2022 (NAR 50:6084), and arrays of ncRNAs in UG27 systems in a bioRxiv
+  preprint of 2026-09-22 ("Coevolutionary mining of prokaryotic non-coding elements with a
+  genome language model"). Family 4 is therefore a rediscovery by the array-first census,
+  not a new system.
