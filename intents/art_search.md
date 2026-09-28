@@ -76,3 +76,11 @@ for upstream of RTs.
   preprint of 2026-09-22 ("Coevolutionary mining of prokaryotic non-coding elements with a
   genome language model"). Family 4 is therefore a rediscovery by the array-first census,
   not a new system.
+- MGV rerun with myRT classes: the 142 non-coding arrays upstream of an RT are 124 DGR, 16 UG27,
+  2 group II intron; none retron-like (ART). No new ART members in human gut viruses (MGV).
+- All 7,240 non-coding MGV arrays cluster into 451 families, but single linkage chains short
+  repeats: the largest "family" (3,898 arrays, 1,071 vOTUs; a near-perfect inverted repeat) is
+  a chaining artifact until art-cluster compares members with a centroid. Smaller families
+  recur across many vOTUs with no RT (e.g. 301 arrays in 58 vOTUs, 37-nt repeat, period ~150);
+  they need screening against known element classes (terminators, REP/BIME-like, Rfam) before
+  any is called new.
