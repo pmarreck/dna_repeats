@@ -21,7 +21,7 @@ pub const Params = struct {
     /// Shortest final unit (after consensus extension): lets a short exact seed find a
     /// degraded array while rejecting short-period repeats that never grow to CRISPR size.
     min_unit: usize = 0,
-    /// Longest unit searched: a repeat still extendable at this length is too long for CRISPR.
+    /// Longest unit searched; a unit grown more than `consensus_margin` past it is too long.
     max_unit: usize = std.math.maxInt(usize),
     /// Mismatches allowed per extended copy, as a fraction of the unit (0.15: 4 of 29).
     max_copy_mismatch_fraction: f64 = 0.15,
@@ -108,47 +108,81 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
     defer positions.deinit(gpa);
     var i: usize = 0;
     while (i < cands.items.len) {
-        var end = cands.items[i].end;
-        var best = cands.items[i];
-        positions.clearRetainingCapacity();
-        try positions.appendSlice(gpa, cands.items[i].copies);
-        var last_copy_end = cands.items[i].end;
-        var j = i + 1;
-        while (j < cands.items.len and cands.items[j].start < end) : (j += 1) {
-            const c = cands.items[j];
-            end = @max(end, c.end);
-            // Take only this candidate's copies past those already taken.
-            for (c.copies) |p| if (p >= last_copy_end) {
-                try positions.append(gpa, p);
-                last_copy_end = p + c.len;
-            };
-            if (c.copies.len > best.copies.len or (c.copies.len == best.copies.len and c.len > best.len)) best = c;
-        }
+        const merged = try mergeFrom(gpa, cands.items, i, &positions);
+        const end = merged.end;
+        const best = cands.items[merged.best];
         const copies = positions.items.len;
         const unit_len = best.len;
-        // A seed shorter than min_unit is weaker evidence (short chance repeats are common),
-        // so such an array needs one copy more.
-        const judged = copies >= params.min_copies + @intFromBool(best.core_len < params.min_unit) and
+        const evidence: Evidence = .{
+            .copies = copies,
+            .core_len = best.core_len,
+            .unit_len = unit_len,
             // Judged on the seed columns' spacers: consensus extension can grow a unit into
             // similar "spacers" and hide them.
-            similarSpacerFraction(subject, best.copies, best.core_off, best.core_len, params.max_spacer_identity) <= params.max_similar_spacer_fraction and
-            try sharedKmerSpacerFraction(gpa, subject, best.copies, unit_len) <= params.max_shared_spacer_fraction and
-            selfSimilarity(best.unit) <= params.max_unit_self_similarity and
-            conservation(subject, best.copies, best.unit) >= params.min_repeat_conservation and
-            // Too long for CRISPR: consensus grew the unit well past the search cap (known
-            // repeats reach ~50 bases, so allow a small margin), or the seed is exactly
-            // extendable at the cap.
-            unit_len >= params.min_unit and
-            unit_len <= params.max_unit +| consensus_margin and
-            !(best.core_len >= params.max_unit and unit_len == best.core_len and extendable(subject, best.copies, unit_len));
-        if (judged) {
+            .similar = similarSpacerFraction(subject, best.copies, best.core_off, best.core_len, params.max_spacer_identity),
+            .shared = try sharedKmerSpacerFraction(gpa, subject, best.copies, unit_len),
+            .self = selfSimilarity(best.unit),
+            .conserved = conservation(subject, best.copies, best.unit),
+        };
+        if (accepted(evidence, params)) {
             const owned = try gpa.dupe(usize, positions.items);
             errdefer gpa.free(owned);
             try out.append(gpa, .{ .start = cands.items[i].start, .end = end, .copies = copies, .unit_len = unit_len, .unit_pos = best.seed, .positions = owned });
         }
-        i = j;
+        i = merged.next;
     }
     return out.toOwnedSlice(gpa);
+}
+
+/// Merge candidate `i` with every later one overlapping the growing union (candidates are
+/// sorted by start), filling `positions` with the union's copies: each candidate
+/// contributes only copies past those already taken. `best` has the most copies, then
+/// the longest unit; `next` is the first candidate not merged.
+fn mergeFrom(gpa: Allocator, cands: []const Cand, i: usize, positions: *std.ArrayList(usize)) Allocator.Error!struct { next: usize, end: usize, best: usize } {
+    var end = cands[i].end;
+    var best = i;
+    positions.clearRetainingCapacity();
+    try positions.appendSlice(gpa, cands[i].copies);
+    var last_copy_end = cands[i].end;
+    var j = i + 1;
+    while (j < cands.len and cands[j].start < end) : (j += 1) {
+        const c = cands[j];
+        end = @max(end, c.end);
+        for (c.copies) |p| if (p >= last_copy_end) {
+            try positions.append(gpa, p);
+            last_copy_end = p + c.len;
+        };
+        if (c.copies.len > cands[best].copies.len or (c.copies.len == cands[best].copies.len and c.len > cands[best].len)) best = j;
+    }
+    return .{ .next = j, .end = end, .best = best };
+}
+
+/// What the filters judge for one merged array (fractions in 0..1).
+const Evidence = struct {
+    copies: usize,
+    /// Length of the exact seed the unit grew from.
+    core_len: usize,
+    unit_len: usize,
+    similar: f64,
+    shared: f64,
+    self: f64,
+    conserved: f64,
+};
+
+/// The array filters as one pure decision (tested as a classifier over each threshold).
+fn accepted(e: Evidence, params: Params) bool {
+    // A seed shorter than min_unit is weaker evidence (short chance repeats are common),
+    // so such an array needs one copy more.
+    return e.copies >= params.min_copies + @intFromBool(e.core_len < params.min_unit) and
+        e.similar <= params.max_similar_spacer_fraction and
+        e.shared <= params.max_shared_spacer_fraction and
+        e.self <= params.max_unit_self_similarity and
+        e.conserved >= params.min_repeat_conservation and
+        e.unit_len >= params.min_unit and
+        // Too long for CRISPR: consensus grew the unit well past the search cap (known
+        // repeats reach ~50 bases, so allow a small margin). Consensus extension already
+        // grows any unit whose copies all continue with the same base.
+        e.unit_len <= params.max_unit +| consensus_margin;
 }
 
 /// A run of consecutive exact copies of one family, borrowing its positions.
@@ -358,36 +392,36 @@ fn consensusExtension(subject: []const u8, copies: []const usize, len: usize) st
     var min_gap: usize = std.math.maxInt(usize);
     for (copies[0 .. copies.len - 1], copies[1..]) |a, b| min_gap = @min(min_gap, b - a - len);
     const room = min_gap -| min_residual_spacer;
-    var left: usize = 0;
-    {
-        var score: isize = 0;
-        var best: isize = 0;
-        var e: usize = 0;
-        while (e < room and copies[0] > e) {
-            e += 1;
-            score += if (agreeAt(subject, copies, -@as(isize, @intCast(e)))) 1 else -weak_column_penalty;
-            if (score > best) {
-                best = score;
-                left = e;
-            } else if (best - score >= xdrop) break;
-        }
+    var left: XDrop = .{};
+    while (left.len < room and copies[0] > left.len) {
+        if (!left.push(agreeAt(subject, copies, -@as(isize, @intCast(left.len)) - 1))) break;
     }
-    var right: usize = 0;
-    {
-        var score: isize = 0;
-        var best: isize = 0;
-        var e: usize = 0;
-        while (left + e < room and copies[copies.len - 1] + len + e < subject.len) {
-            score += if (agreeAt(subject, copies, @intCast(len + e))) 1 else -weak_column_penalty;
-            e += 1;
-            if (score > best) {
-                best = score;
-                right = e;
-            } else if (best - score >= xdrop) break;
-        }
+    var right: XDrop = .{};
+    while (left.best_len + right.len < room and copies[copies.len - 1] + len + right.len < subject.len) {
+        if (!right.push(agreeAt(subject, copies, @intCast(len + right.len)))) break;
     }
-    return .{ .left = left, .right = right };
+    return .{ .left = left.best_len, .right = right.best_len };
 }
+
+/// X-drop scoring over columns fed one at a time: +1 for a strongly agreeing column,
+/// -`weak_column_penalty` otherwise; `best_len` is the length at the best score.
+const XDrop = struct {
+    score: isize = 0,
+    best: isize = 0,
+    len: usize = 0,
+    best_len: usize = 0,
+
+    /// Take one column; false once the score has fallen `xdrop` below its best.
+    fn push(self: *XDrop, agree: bool) bool {
+        self.len += 1;
+        self.score += if (agree) 1 else -weak_column_penalty;
+        if (self.score > self.best) {
+            self.best = self.score;
+            self.best_len = self.len;
+        } else if (self.best - self.score >= xdrop) return false;
+        return true;
+    }
+};
 
 const consensus_agreement = 0.8;
 const weak_column_penalty = 2;
@@ -489,18 +523,6 @@ fn selfSimilarity(unit: []const u8) f64 {
         best = @max(best, @as(f64, @floatFromInt(same)) / @as(f64, @floatFromInt(unit.len - p)));
     }
     return best;
-}
-
-/// True when every copy has the same base just before it, or just after it: the
-/// repeat continues past this unit.
-fn extendable(subject: []const u8, copies: []const usize, len: usize) bool {
-    var left = copies[0] > 0;
-    var right = copies[0] + len < subject.len;
-    for (copies) |p| {
-        left = left and p > 0 and subject[p - 1] == subject[copies[0] - 1];
-        right = right and p + len < subject.len and subject[p + len] == subject[copies[0] + len];
-    }
-    return left or right;
 }
 
 const testing = std.testing;
@@ -954,6 +976,12 @@ test "peel order: seeds of at least min_unit first (most copies, then longest); 
     }
     std.mem.sort(Run, &runs, @as(usize, 23), Run.peelOrder);
     for (runs, want) |r, w| try testing.expectEqual(w, [2]usize{ r.len, r.copies.len });
+    // A strict order on every pair, so the sort result does not depend on input order.
+    for (want, 0..) |a, i| for (want, 0..) |b, j| {
+        const ra: Run = .{ .start = 0, .end = 1, .len = a[0], .copies = pos[0..a[1]] };
+        const rb: Run = .{ .start = 0, .end = 1, .len = b[0], .copies = pos[0..b[1]] };
+        try testing.expectEqual(i < j, Run.peelOrder(23, ra, rb));
+    };
 }
 
 test "an array seeded only by a run shorter than min_unit needs one copy more than min_copies" {
@@ -978,4 +1006,138 @@ test "an array seeded only by a run shorter than min_unit needs one copy more th
         defer freeArrays(testing.allocator, arrays);
         try testing.expectEqual(@as(usize, n - 3), arrays.len);
     }
+}
+
+test "accepted: each filter classifies its metric at, below and above its threshold" {
+    const p: Params = .{ .min_copies = 3, .min_unit = 23, .max_unit = 47 };
+    const ok: Evidence = .{ .copies = 5, .core_len = 30, .unit_len = 30, .similar = 0, .shared = 0, .self = 0.5, .conserved = 1 };
+    try testing.expect(accepted(ok, p));
+    const fractions = [_]f64{ 0, 0.1, 0.2, 0.3, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1 };
+    for (fractions) |x| {
+        var e = ok;
+        e.similar = x;
+        try testing.expectEqual(x <= p.max_similar_spacer_fraction, accepted(e, p));
+        e = ok;
+        e.shared = x;
+        try testing.expectEqual(x <= p.max_shared_spacer_fraction, accepted(e, p));
+        e = ok;
+        e.self = x;
+        try testing.expectEqual(x <= p.max_unit_self_similarity, accepted(e, p));
+        e = ok;
+        e.conserved = x;
+        try testing.expectEqual(x >= p.min_repeat_conservation, accepted(e, p));
+    }
+    for (0..70) |n| {
+        var e = ok;
+        e.unit_len = n;
+        try testing.expectEqual(n >= 23 and n <= 47 + consensus_margin, accepted(e, p));
+        e = ok;
+        e.copies = n;
+        try testing.expectEqual(n >= 3, accepted(e, p));
+        // A seed shorter than min_unit needs one copy more.
+        e.core_len = 22;
+        try testing.expectEqual(n >= 4, accepted(e, p));
+    }
+}
+
+test "mergeFrom: overlapping candidates merge into their union; touching ones do not" {
+    const gpa = testing.allocator;
+    var unit = [_]u8{'A'};
+    var c0 = [_]usize{ 0, 50, 100 }; // len 20: [0, 120)
+    var c1 = [_]usize{ 100, 150, 200, 250 }; // len 22: [100, 272); 100 is c0's last copy
+    var c2 = [_]usize{ 260, 320 }; // [260, 342): overlaps c1 only
+    var c3 = [_]usize{ 342, 400, 460 }; // starts where the union ends: separate
+    const cands = [_]Cand{
+        .{ .start = 0, .end = 120, .len = 20, .seed = 0, .core_off = 0, .core_len = 20, .copies = &c0, .unit = &unit },
+        .{ .start = 100, .end = 272, .len = 22, .seed = 100, .core_off = 0, .core_len = 22, .copies = &c1, .unit = &unit },
+        .{ .start = 260, .end = 342, .len = 22, .seed = 260, .core_off = 0, .core_len = 22, .copies = &c2, .unit = &unit },
+        .{ .start = 342, .end = 482, .len = 22, .seed = 342, .core_off = 0, .core_len = 22, .copies = &c3, .unit = &unit },
+    };
+    var positions: std.ArrayList(usize) = .empty;
+    defer positions.deinit(gpa);
+    const m = try mergeFrom(gpa, &cands, 0, &positions);
+    try testing.expectEqual(@as(usize, 3), m.next);
+    try testing.expectEqual(@as(usize, 342), m.end);
+    // c1 has the most copies; c2's 260 lies inside c1's copy at 250.
+    try testing.expectEqual(@as(usize, 1), m.best);
+    try testing.expectEqualSlices(usize, &.{ 0, 50, 100, 150, 200, 250, 320 }, positions.items);
+    const n = try mergeFrom(gpa, &cands, 3, &positions);
+    try testing.expectEqual(@as(usize, 4), n.next);
+    try testing.expectEqualSlices(usize, &c3, positions.items);
+}
+
+test "mergeFrom: the best candidate has the most copies, then the longest unit" {
+    const gpa = testing.allocator;
+    var unit = [_]u8{'A'};
+    var a = [_]usize{ 0, 50, 100 };
+    var b = [_]usize{ 10, 60, 110 };
+    var c = [_]usize{ 20, 70 };
+    const cands = [_]Cand{
+        .{ .start = 0, .end = 120, .len = 20, .seed = 0, .core_off = 0, .core_len = 20, .copies = &a, .unit = &unit },
+        .{ .start = 10, .end = 134, .len = 24, .seed = 10, .core_off = 0, .core_len = 24, .copies = &b, .unit = &unit },
+        .{ .start = 20, .end = 100, .len = 30, .seed = 20, .core_off = 0, .core_len = 30, .copies = &c, .unit = &unit },
+    };
+    var positions: std.ArrayList(usize) = .empty;
+    defer positions.deinit(gpa);
+    try testing.expectEqual(@as(usize, 1), (try mergeFrom(gpa, &cands, 0, &positions)).best);
+}
+
+test "extend: a copy with exactly the budget of mismatches is taken on either side; one more is not" {
+    const gpa = testing.allocator;
+    var unit: [20]u8 = undefined;
+    fillRandom(&unit, 241);
+    const budget = 3; // floor(0.15 * 20)
+    for ([_]usize{ budget, budget + 1 }) |bad| {
+        var buf: [180]u8 = undefined;
+        fillRandom(&buf, 242);
+        var copy = unit;
+        for (0..bad) |k| copy[k * 6] = if (copy[k * 6] == 'A') 'C' else 'A';
+        @memcpy(buf[10..][0..20], &copy); // left copy, 40-base spacer
+        @memcpy(buf[70..][0..20], &unit); // anchor
+        @memcpy(buf[130..][0..20], &copy); // right copy, 40-base spacer
+        const got = try extend(gpa, &buf, &.{70}, &unit, .{});
+        defer gpa.free(got);
+        if (bad == budget) try testing.expectEqualSlices(usize, &.{ 10, 70, 130 }, got) else try testing.expectEqualSlices(usize, &.{70}, got);
+    }
+}
+
+test "similarSpacerFraction: a pair counts as similar only above the identity threshold" {
+    for (0..11) |same| {
+        // Three copies of a 4-base unit with two 10-base spacers sharing `same` positions.
+        var buf = [_]u8{'G'} ** 32;
+        const s1 = buf[4..14];
+        const s2 = buf[18..28];
+        for (s1, s2, 0..) |*a, *b, k| {
+            a.* = 'A';
+            b.* = if (k < same) 'A' else 'C';
+        }
+        const got = similarSpacerFraction(&buf, &.{ 0, 14, 28 }, 0, 4, 0.6);
+        try testing.expectEqual(@as(f64, if (same > 6) 1 else 0), got);
+    }
+}
+
+test "XDrop: crosses weak columns while the score can recover; keeps the best length" {
+    const cases = [_]struct { cols: []const u8, want: usize }{
+        .{ .cols = "SSSS", .want = 4 },
+        .{ .cols = "WSSSS", .want = 5 }, // -2 then +4: best at 5
+        .{ .cols = "WSS", .want = 0 }, // never above 0
+        .{ .cols = "SWSWSSSSS", .want = 9 }, // drops to -1 below best 1 twice, recovers
+        .{ .cols = "SWWSSSSSS", .want = 1 }, // two weak in a row: 4 below best, stop
+        .{ .cols = "SSWSWSSSSSS", .want = 11 },
+        .{ .cols = "WW", .want = 0 },
+    };
+    for (cases) |c| {
+        var x: XDrop = .{};
+        for (c.cols) |col| if (!x.push(col == 'S')) break;
+        try testing.expectEqual(c.want, x.best_len);
+    }
+}
+
+test "consensus: majority base per column, ties to the earlier of ACGT, no base keeps the first copy's" {
+    const gpa = testing.allocator;
+    const subject = "AAGN" ++ "ACCN" ++ "CGTN" ++ "CTTN";
+    const got = try consensus(gpa, subject, &.{ 0, 4, 8, 12 }, 4);
+    defer gpa.free(got);
+    // col0 A,A,C,C tie -> A; col1 A,C,G,T tie -> A; col2 G,C,T,T -> T; col3 N -> N.
+    try testing.expectEqualStrings("AATN", got);
 }
