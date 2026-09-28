@@ -1,0 +1,45 @@
+#!/usr/bin/env luajit
+-- Known-RNA screen of repeat families: each art-cluster family row plus its representative
+-- locus (bench/art-reps), the best included Rfam hit from cmscan --fmt 2 --tblout (lowest
+-- E-value among "!" hits) and the number of tRNA/tmRNA genes ARAGORN (-w) finds there.
+-- A family matching a known RNA is a rediscovery, not a candidate novel element.
+-- usage: bench/art-annotate FAMILIES.tsv REPS.fa CMSCAN.tbl ARAGORN.txt
+
+local function main(fam_path, reps_path, tbl_path, ara_path)
+	local locus = {}
+	for line in io.lines(reps_path) do
+		local fam, loc = line:match("^>(%d+)|(%S+)")
+		if fam then locus[tonumber(fam)] = loc end
+	end
+	local best = {}
+	for line in io.lines(tbl_path) do
+		if line:sub(1, 1) ~= "#" then
+			local f = {}
+			for x in line:gmatch("%S+") do f[#f + 1] = x end
+			-- fmt 2 columns: 2 target name, 4 query name, 18 E-value, 19 inc
+			local fam, e = tonumber(f[4]:match("^(%d+)|")), tonumber(f[18])
+			if fam and f[19] == "!" and (not best[fam] or e < best[fam].e) then
+				best[fam] = { name = f[2], e = e, text = f[18] }
+			end
+		end
+	end
+	local genes, cur = {}, nil
+	for line in io.lines(ara_path) do
+		local fam = line:match("^>(%d+)|")
+		if fam then
+			cur = tonumber(fam)
+		elseif line:sub(1, 1) == ">" then
+			cur = nil
+		elseif cur then
+			local n = line:match("^(%d+) genes? found")
+			if n then genes[cur] = tonumber(n) end
+		end
+	end
+	for line in io.lines(fam_path) do
+		local fam = tonumber(line:match("^(%d+)\t"))
+		local b = best[fam]
+		print(table.concat({ line, locus[fam] or "-", b and b.name or "-", b and b.text or "-", tostring(genes[fam] or 0) }, "\t"))
+	end
+end
+
+main(assert(arg[1], "usage: art-annotate FAMILIES.tsv REPS.fa CMSCAN.tbl ARAGORN.txt"), assert(arg[2]), assert(arg[3]), assert(arg[4]))

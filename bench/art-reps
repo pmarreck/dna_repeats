@@ -1,0 +1,58 @@
+#!/usr/bin/env luajit
+-- Representative arrays for Rfam/tRNA screening: per family in an art-cluster MEMBERS.tsv
+-- (family, then the census row: record, start, end, copies, ...), the member with the most
+-- copies (the first on ties), its bases cut from GENOMES (FASTA, plain or .gz) and printed as
+-- >FAMILY|REC:START-END, in family order. One genome record is held in memory at a time.
+-- usage: bench/art-reps MEMBERS.tsv GENOMES.fa[.gz]
+
+local function split(line)
+	local f = {}
+	for x in (line .. "\t"):gmatch("([^\t]*)\t") do f[#f + 1] = x end
+	return f
+end
+
+local function main(members_path, genomes_path)
+	local rep, fams = {}, {}
+	for line in io.lines(members_path) do
+		local f = split(line)
+		local fam, copies = tonumber(f[1]), tonumber(f[5])
+		if not rep[fam] then fams[#fams + 1] = fam end
+		if not rep[fam] or copies > rep[fam].copies then
+			rep[fam] = { rec = f[2], s = tonumber(f[3]), e = tonumber(f[4]), copies = copies }
+		end
+	end
+	local wanted = {}
+	for _, fam in ipairs(fams) do
+		local r = rep[fam]
+		wanted[r.rec] = wanted[r.rec] or {}
+		table.insert(wanted[r.rec], fam)
+	end
+	local out = {}
+	local name, parts = nil, {}
+	local function flush()
+		if not (name and wanted[name]) then return end
+		local seq = table.concat(parts):upper()
+		for _, fam in ipairs(wanted[name]) do
+			local r = rep[fam]
+			out[fam] = string.format(">%d|%s:%d-%d\n%s", fam, name, r.s, r.e, seq:sub(r.s, r.e))
+		end
+	end
+	local input = genomes_path:match("%.gz$") and assert(io.popen("gzip -dc '" .. genomes_path:gsub("'", "'\\''") .. "'"))
+		or assert(io.open(genomes_path))
+	for line in input:lines() do
+		if line:sub(1, 1) == ">" then
+			flush()
+			name, parts = line:match("^>(%S+)"), {}
+		elseif name and wanted[name] then
+			parts[#parts + 1] = (line:gsub("%s", ""))
+		end
+	end
+	flush()
+	input:close()
+	table.sort(fams)
+	for _, fam in ipairs(fams) do
+		print((assert(out[fam], "record not in genomes: " .. rep[fam].rec)))
+	end
+end
+
+main(assert(arg[1], "usage: art-reps MEMBERS.tsv GENOMES.fa[.gz]"), assert(arg[2], "usage: art-reps MEMBERS.tsv GENOMES.fa[.gz]"))

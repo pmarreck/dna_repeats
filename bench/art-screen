@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Known-RNA screen of art-cluster families (intents/art_search.md): each family's
+# representative array (bench/art-reps) against Rfam 15.0 (Infernal cmscan, gathering
+# thresholds, clan competition) and ARAGORN tRNA/tmRNA calls; bench/art-annotate joins them.
+# Writes OUTDIR/{reps.fa,rfam.tbl,aragorn.txt,screened.tsv} and prints how many families match
+# a known RNA. usage: bench/art-screen FAMILIES.tsv MEMBERS.tsv GENOMES.fa[.gz] OUTDIR [-j THREADS]
+set -u
+cd "$(dirname "$0")/.." || exit 1
+[ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
+usage="usage: art-screen FAMILIES.tsv MEMBERS.tsv GENOMES.fa[.gz] OUTDIR [-j THREADS]"
+fams=${1:?$usage} members=${2:?$usage} genomes=${3:?$usage} out=${4:?$usage}
+threads=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+[ "${5:-}" = "-j" ] && threads=${6:?}
+rfam=$(nix build .#rfam --no-link --print-out-paths) || exit 1
+mkdir -p "$out" || exit 1
+luajit bench/art-reps "$members" "$genomes" >"$out/reps.fa" || exit 1
+cmscan --rfam --cut_ga --nohmmonly --fmt 2 --clanin "$rfam/Rfam.clanin" --oskip --cpu "$threads" \
+	--tblout "$out/rfam.tbl" "$rfam/Rfam.cm" "$out/reps.fa" >/dev/null || { echo "art-screen: cmscan failed" >&2; exit 1; }
+aragorn -t -m -w "$out/reps.fa" >"$out/aragorn.txt" || { echo "art-screen: aragorn failed" >&2; exit 1; }
+luajit bench/art-annotate "$fams" "$out/reps.fa" "$out/rfam.tbl" "$out/aragorn.txt" >"$out/screened.tsv" || exit 1
+awk -F'\t' '{n++; if ($9 != "-" || $11 > 0) k++} END {printf "families: %d; matching a known RNA (Rfam or tRNA/tmRNA): %d\n", n, k}' "$out/screened.tsv"

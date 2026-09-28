@@ -176,6 +176,14 @@ in {
 	pfamRvt1 = pkgs.runCommand "PF00078.hmm" { nativeBuildInputs = [ pkgs.gzip ]; } ''
 		gunzip -c ${pkgs.fetchurl { name = "PF00078.hmm.gz"; url = "https://www.ebi.ac.uk/interpro/wwwapi//entry/pfam/PF00078?annotation=hmm"; hash = "sha256-AzDT0bMx4iWhSw6z4IUlmp1lU/bfSVK9xuaO+QqoJWM="; }} > $out
 	'';
+	# Rfam 15.0 covariance models, cmpress-ed for cmscan, plus the clan table for --clanin.
+	rfam = pkgs.runCommand "rfam-15.0" { nativeBuildInputs = [ pkgs.gzip (import ./infernal.nix { inherit pkgs; }) ]; } ''
+		mkdir -p $out
+		gunzip -c ${pkgs.fetchurl { url = "https://ftp.ebi.ac.uk/pub/databases/Rfam/15.0/Rfam.cm.gz"; hash = "sha256-+Ihe4b33oIXJpor5S+aNI+Y9pkfY+fCYNdIqIY0r/p8="; }} > $out/Rfam.cm
+		cp ${pkgs.fetchurl { url = "https://ftp.ebi.ac.uk/pub/databases/Rfam/15.0/Rfam.clanin"; hash = "sha256-dnPBBcpP6lLu4ZwBunuptedu7UkOwSbfCaA5sq6PXRE="; }} $out/Rfam.clanin
+		cmpress $out/Rfam.cm
+	'';
+	infernal = import ./infernal.nix { inherit pkgs; };
 	# Negative control: the dev genomes with each record's bases shuffled (seed 1), so no real
 	# repeat survives; every array a tool reports on them is a false positive.
 	shuffledGenomes = pkgs.runCommand "scoreboard-shuffled-genomes" { nativeBuildInputs = [ pkgs.gawk pkgs.bash ]; } ''
