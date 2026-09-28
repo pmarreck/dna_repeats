@@ -176,6 +176,23 @@ t=crispr-min-copies-5-finds-none
 capture "$bin" --crispr --min-copies 5 "$work/array.fa"
 expect_rc $t 0 && expect_eq $t "$out" "" && pass $t
 
+# A degraded array: copies alternate between two variants of dr (column 5 or 22 changed), so
+# consecutive copies share only 16 exact bases, under --crispr's 18-base seeds.
+deg_a=${dr:0:5}C${dr:6}; deg_b=${dr:0:22}A${dr:23}
+{ echo ">deg"; echo "$(rnd 40 1)$deg_a$(rnd 30 2)$deg_b$(rnd 30 3)$deg_a$(rnd 30 4)$deg_b$(rnd 30 6)$deg_a$(rnd 40 5)"; } >"$work/degraded.fa"
+
+t=crispr-misses-degraded-array
+capture "$bin" --crispr "$work/degraded.fa"
+expect_rc $t 0 && expect_eq $t "$out" "" && pass $t
+
+t=sensitive-finds-degraded-array
+capture "$bin" --sensitive --crispr "$work/degraded.fa"
+expect_rc $t 0 && expect_eq $t "$(cut -f1-5,7 <<<"$out")" "deg	41	305	5	29	41,100,159,218,277" && pass $t
+
+t=sensitive-needs-arrays
+capture "$bin" --sensitive "$work/degraded.fa"
+expect_rc $t 2 && expect_has $t "$err" "SensitiveNeedsArrays" && expect_eq $t "$out" "" && pass $t
+
 t=output-refuses-to-overwrite-input
 cp "$work/sample.txt" "$work/victim.txt"
 capture "$bin" "${run[@]}" -o "$work/victim.txt" "$work/victim.txt"

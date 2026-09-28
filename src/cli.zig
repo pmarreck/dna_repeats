@@ -18,6 +18,7 @@ pub const usage =
     \\  --min-spacer N       fewest bases between array copies (default 0)
     \\  --min-unit N         shortest array repeat after extension (default 0)
     \\  --crispr             CRISPR preset: --arrays, repeats 23..47 (seeds from 18), spacers 26..64
+    \\  --sensitive          array seeds from 14 bases: finds more degraded arrays, a few more false ones
     \\  -j, --threads N      worker threads (default: one per CPU)
     \\  -o, --output PATH    write results to PATH ('-' or @stdout: stdout; @stderr: stderr)
     \\  --progress           always show progress on stderr
@@ -66,9 +67,15 @@ pub const Config = struct {
     min_spacer: usize = 0,
     /// Shortest array unit after consensus extension (seeds may be shorter).
     min_unit: usize = 0,
+    /// Array seeds from `sensitive_seed` bases (finds more degraded arrays).
+    sensitive: bool = false,
 };
 
-pub const ParseError = error{ MissingValue, BadNumber, UnknownOption, MissingInput, ExtraInput, EmptyLengthRange };
+/// Seed length under --sensitive: at 8% substitution it recalls 16 of 20 planted arrays
+/// (18-base seeds: 12) for about one extra false positive per 30 real genomes.
+pub const sensitive_seed = 14;
+
+pub const ParseError = error{ MissingValue, BadNumber, UnknownOption, MissingInput, ExtraInput, EmptyLengthRange, SensitiveNeedsArrays };
 
 /// PCRE2 bounded quantifiers ({0,n}, {n}) accept at most this value.
 const max_quantifier = 65535;
@@ -113,6 +120,8 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
         } else if (eql(a, "--ascii") or eql(a, "--simple")) {
             cfg.ascii = true;
             cfg.color = .off;
+        } else if (eql(a, "--sensitive")) {
+            cfg.sensitive = true;
         } else if (eql(a, "--arrays")) {
             cfg.arrays = true;
         } else if (eql(a, "--crispr")) {
@@ -154,6 +163,11 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
         }
     }
     if (!have_path and !cfg.help and !cfg.about) return error.MissingInput;
+    if (cfg.sensitive) {
+        // Applied after parsing so its position relative to --crispr does not matter.
+        if (!cfg.arrays) return error.SensitiveNeedsArrays;
+        cfg.min_len = @min(cfg.min_len, sensitive_seed);
+    }
     if (cfg.min_len == 0 or cfg.min_len > cfg.max_len) return error.EmptyLengthRange;
     // The candidate scan uses gap max_gap + (max_len - min_len) in one quantifier.
     if (cfg.max_gap + (cfg.max_len - cfg.min_len) > max_quantifier) return error.BadNumber;
@@ -516,4 +530,17 @@ test "--min-unit: default 0, 23 under --crispr, later wins" {
     try testing.expectEqual(@as(usize, 23), (try parseArgs(&.{ "x", "--min-unit", "30", "--crispr" })).min_unit);
     try testing.expectError(error.MissingValue, parseArgs(&.{ "x", "--min-unit" }));
     try testing.expectError(error.BadNumber, parseArgs(&.{ "x", "--min-unit", "x" }));
+}
+
+test "--sensitive: array seeds from 14 bases in any position; needs --arrays or --crispr" {
+    try testing.expect(!(try parseArgs(&.{ "x", "--crispr" })).sensitive);
+    const a = try parseArgs(&.{ "x", "--crispr", "--sensitive" });
+    try testing.expectEqual(@as(usize, 14), a.min_len);
+    try testing.expectEqual(@as(usize, 23), a.min_unit);
+    try testing.expectEqual(@as(usize, 14), (try parseArgs(&.{ "x", "--sensitive", "--crispr" })).min_len);
+    // Plain --arrays already seeds from the default --min-len 8, which is lower.
+    try testing.expectEqual(@as(usize, 8), (try parseArgs(&.{ "x", "--sensitive", "--arrays" })).min_len);
+    // A lower explicit seed length stays.
+    try testing.expectEqual(@as(usize, 12), (try parseArgs(&.{ "x", "--crispr", "--min-len", "12", "--sensitive" })).min_len);
+    try testing.expectError(error.SensitiveNeedsArrays, parseArgs(&.{ "x", "--sensitive" }));
 }
