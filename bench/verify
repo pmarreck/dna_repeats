@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reproduce the README's headline results and check them against bench/expected.tsv:
 # held-out set #3 and the shuffled negative control (every tool, one thread) and the
-# divergence sweep (dna-repeats). Recall, predictions, correct predictions and exact
+# divergence sweep (dna-repeats), and the ART loci (bench/art-check). Recall, predictions, correct predictions and exact
 # repeats are deterministic and must match exactly; times and memory depend on the
 # machine, so they are printed with the speed and memory ratios but never fail the run.
 # usage: bench/verify     (exit 0 when every expected row matches)
@@ -16,6 +16,7 @@ status=0
 bench/scoreboard --set heldout3 minced pilercr dnarepeats_1t dnarepeats || status=1
 bench/scoreboard --set shuffled minced pilercr dnarepeats_1t | sed 1d || status=1
 bench/divergence dnarepeats dnarepeats_sensitive >/dev/null || status=1
+bench/art-check >"$work/art.tsv" || status=1
 
 # Compare the latest measured row for each expected (set, tool).
 jq -r '[.set, .tool, .recalled, .el4, .predictions, .correct, .dr_scored, .dr_exact] | @tsv' "$SCOREBOARD_LOG" >"$work/got.tsv"
@@ -28,6 +29,16 @@ while IFS=$'\t' read -r set tool want; do
 		printf 'MISMATCH %s %s: got [%s] want [%s]\n' "$set" "$tool" "$got" "$want" >&2
 	fi
 done < <(grep -v '^#' bench/expected.tsv | awk -F'\t' -v OFS='\t' '{row = $3; for (i = 4; i <= NF; i++) row = row "\t" $i; print $1, $2, row}')
+
+# ART loci (intents/art_search.md): each locus must match its expected found/none.
+while IFS=$'\t' read -r acc got phage set want _; do
+	checked=$((checked + 1))
+	if [ "$got" != "$want" ]; then
+		mismatched=$((mismatched + 1))
+		printf 'MISMATCH ART %s (%s): got %s want %s\n' "$acc" "$phage" "$got" "$want" >&2
+	fi
+done <"$work/art.tsv"
+printf 'ART loci: %d of %d with an --art array upstream of the RT, as expected.\n' "$(grep -c '	found	' "$work/art.tsv")" "$(wc -l <"$work/art.tsv" | tr -d ' ')"
 
 echo
 jq -rs 'map(select(.set == "heldout3")) | (map({key: .tool, value: .}) | from_entries) as $r

@@ -116,6 +116,18 @@ let
 		"CP006716.1" = "sha256-7gE/Qw6hnZ1psyDHdvY/MSUFIrZUwnRTbn4+iDZebAw=";
 		"CP047529.1" = "sha256-64OLCRE6kt5axMd5S5pD7tJHJviUOsvfjNyfSVY5X+M=";
 	};
+	# Phage genomes with ART loci named in Yoon et al. 2026 (intents/art_search.md): the tuning
+	# and held-out sets for the --art preset, fixed on 2026-09-28 before tuning.
+	artHashes = {
+		"MW248466.1" = "sha256-r4zHpDqZJPZeZJvjE2WJ2t3a4sKzZmWOaxZF1No25sY=";
+		"MW218148.1" = "sha256-dsmEX2THhkGCVnvgOyzs5E9MlVqTLs+M7El9se/97lE=";
+		"MW349129.1" = "sha256-4zX/ek5cMHji/6jckkdFoa1r8dsbSPFh9ubBgVQMJ4k=";
+		"OR836606.1" = "sha256-vw1GQntqaH/RKmSU2TtqyZxohXpCijq746Qhq6RRPZY=";
+		"LC680885.1" = "sha256-XH71+y+ugUJsP/mdpnnyW0VIKVrviUN/wV/Fo0pRWns=";
+		"MN091626.1" = "sha256-LI8Rkx4UkxPNp3yzn7BH8MdrUm8BUycl/p5bcdkDkWo=";
+		"MZ779063.1" = "sha256-EORkznJxDvyXPB9kyR0CN+eMvIdKgrlIORL03pc08iA=";
+		"MZ422438.1" = "sha256-S+LOPC7EhtYUEAZh2J//8qhyHjCSMlGaKRKV2dbchag=";
+	};
 	fetchGenome = acc: hash: pkgs.fetchurl {
 		name = "${acc}.fa";
 		url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=${acc}&rettype=fasta&retmode=text";
@@ -157,6 +169,7 @@ in {
 	heldout2Truth = mkTruth "crisprcasdb-heldout2-truth.tsv" heldout2Hashes;
 	heldout3Genomes = genomeFarm "scoreboard-heldout3-genomes" heldout3Hashes;
 	heldout3Truth = mkTruth "crisprcasdb-heldout3-truth.tsv" heldout3Hashes;
+	artGenomes = genomeFarm "art-genomes" artHashes;
 	# Negative control: the dev genomes with each record's bases shuffled (seed 1), so no real
 	# repeat survives; every array a tool reports on them is a false positive.
 	shuffledGenomes = pkgs.runCommand "scoreboard-shuffled-genomes" { nativeBuildInputs = [ pkgs.gawk pkgs.bash ]; } ''

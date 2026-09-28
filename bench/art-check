@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# ART locus check (intents/art_search.md): for each locus in the table, run dna-repeats --art
+# on its genome and report whether a called array overlaps the 6 kb upstream of the RT
+# (strand-aware: below the RT start on +, above it on -), as in the paper's window.
+# Prints: accession, found|none, phage, set, expected, overlapping arrays (start-end copies unit).
+# usage: bench/art-check [--genomes DIR] [--loci FILE]   (defaults: the pinned art genomes, bench/art_loci.tsv)
+#   env DNAREPEATS_BIN uses that binary instead of building it.
+set -u
+cd "$(dirname "$0")/.." || exit 1
+genomes= loci=bench/art_loci.tsv
+while [ $# -gt 0 ]; do
+	case $1 in
+		--genomes) genomes=${2:?}; shift 2 ;;
+		--loci) loci=${2:?}; shift 2 ;;
+		*) echo "unknown option: $1" >&2; exit 2 ;;
+	esac
+done
+[ -n "$genomes" ] || genomes=$(nix build .#artGenomes --no-link --print-out-paths) || exit 1
+bin=${DNAREPEATS_BIN:-}
+[ -n "$bin" ] || { p=$(nix build .#default --no-link --print-out-paths) || exit 1; bin=$p/bin/dna-repeats; }
+readonly UPSTREAM=6000
+
+grep -v '^#' "$loci" | while IFS=$'\t' read -r acc phage set strand start _ expected; do
+	"$bin" --no-progress --art "$genomes/$acc.fa" 2>/dev/null |
+		awk -F'\t' -v OFS='\t' -v acc="$acc" -v phage="$phage" -v set="$set" -v st="$strand" -v rt="$start" -v up="$UPSTREAM" -v want="$expected" '
+			{ lo = st == "+" ? rt - up : rt; hi = st == "+" ? rt : rt + up
+			  if ($3 >= lo && $2 <= hi) hits = hits (hits ? " " : "") $2 "-" $3 " x" $4 " " $6 }
+			END { print acc, hits ? "found" : "none", phage, set, want, hits }'
+done

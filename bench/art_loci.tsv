@@ -1,0 +1,9 @@
+# accession	phage	set	rt_strand	rt_start	paper_reports_array	expected
+MW248466.1	MarsHill	tuning	+	215089	yes	found
+MW218148.1	SA1	tuning	+	10647	yes	found
+MW349129.1	Madawaska	tuning	+	214290	yes	found
+OR836606.1	LY01	heldout	-	74813	yes	found
+LC680885.1	S6	heldout	+	167556	yes	found
+MN091626.1	PALS_2	heldout	+	24879	yes	found
+MZ779063.1	UFV_DC4	heldout	+	125252	yes	found
+MZ422438.1	LPJP1	heldout	-	185562	no	none

@@ -12,7 +12,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] ART (Peter, 2026-09-28): run on the relevant genomes and try to exceed the Anthropic ART preprint. Feasibility: MarsHill (MW248466.1) array found upstream of the RT (5 copies, 14-nt core -> 35-nt consensus) but CRISPR filters reject it (conservation 0.897, spacer 10-mer sharing 0.33); scope questions pending with Peter.
 	- [x] ART 1: --art preset from the paper's parameters (seeds 12, repeats 15..49, 100..450 nt spacing, conservation 0.8, spacer-sharing filter off), TDD. (done 2026-09-28 09:35 EDT, 714484a)
 	- [x] ART 2: tuning 3/3; held-out once 4/5 (LPJP1 has no array we or the paper report; 4/4 where the paper reports one); results in intents/art_search.md. (done 2026-09-28 09:42 EDT)
-	- [ ] ART 2b: pin the 8 genomes in nix/benchdata.nix and add an ART check to bench/verify.
+	- [x] ART 2b: 8 ART genomes pinned (artGenomes); bench/art-check (strand-aware window, tested as a classifier); bench/verify checks all 8 (31 of 31 verified). (done 2026-09-28 10:05 EDT)
 	- [ ] ART 3: pin INPHARED (all GenBank phage genomes) and scan it; time and memory for the whole collection.
 	- [ ] ART 4: link arrays to RTs: prodigal gene calls near arrays, HMMER with an RT profile built from MarsHill RT homologs as in the paper.
 	- [ ] ART 5: census and repeat clustering (both strands) for repeats the same as or similar to ART repeats; add GPD and MGV; IMG/VR v4.1 when Peter has JGI access.
