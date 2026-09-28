@@ -44,7 +44,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Exploratory, measure + TDD: 2-bit base packing (32 bases per u64) for unit equality and popcount Hamming in seed extension.
 - [ ] Exploratory, measure + TDD: SIMD (@Vector) window search for unit copies in extension and scan; compare against scalar and PCRE2 JIT.
 - [x] Final report (Peter, 2026-09-26): published as a private artifact, https://claude.ai/artifact/YDA9CSb9S3wHVikR2ge4Te (held-out #3 five-axis small multiples, divergence curves, all sets, method, limits, reproduction). Keep it updated as results change. (done 2026-09-28 02:30 EDT)
-- [ ] Correction sent to Peter: the 2026-09-26 email's "7x faster than MinCED" was 64-core wall time; before the k-mer scan dna-repeats was 2.4-3.7x slower per core. Now 3.6-5.9x faster per core.
+- [x] Correction sent to Peter (email 2026-09-28 02:35 EDT): the 2026-09-26 email's "7x faster than MinCED" was 64-core wall time; before the k-mer scan dna-repeats was 2.4-3.7x slower per core. Now 3.6-5.9x faster per core.
 - [ ] Best-in-class biotech CLI: standard outputs (GFF3, BED, FASTA of spacers), --crispr preset, clear docs/README, packaging (Nix, static binaries; consider Bioconda).
 - [x] Split the finder, oracle and CLI out of the pcre2 fork into this repository with history; pin the fork by commit bc340132 and build through Nix. (done 2026-09-24 21:50 EDT)
 - [x] CLI conventions: --about, -o/--output with -/@stdout/@stderr, --no-color/--no-ansi/NO_COLOR, --ascii/--simple, TTY progress (--progress/--no-progress), debug banner, tests/cli suite as the Nix cli check in ./test. (done 2026-09-25 23:55 EDT)
