@@ -115,3 +115,23 @@ for upstream of RTs.
   every record shuffled preserving exact dinucleotide counts gives 8 arrays (vs 2,633 real, 3
   mononucleotide-shuffled), all 15-16-nt low-complexity units with 3-4 copies, and 0
   RT-upstream: about 0.3% of the sample's array calls are expected under this null.
+- Gene context (bench/art-context-run, Pfam-A 38.2 via hmmsearch with gathering thresholds;
+  commit 6b9caa5): for the 27 unexplained MGV families in >= 10 vOTUs plus 5 controls, the
+  fraction of members with each Pfam domain on a protein within 8 kb. Controls behave: UG27
+  family 65 has RVT_1 beside 86% of members. The CRISPR-geometry families have no Cas domain
+  nearby (orphan arrays); family 3 has an ECF sigma factor beside 280 of 283 members.
+  - Replication/partition neighbours (Rep3, ParA/MipZ, DnaA; families 9, 11, 38, 50, 53, 110):
+    most likely iteron-like origin repeats of phage-plasmids, a known class.
+  - UG27 again: families 15 (ATATGAAACAATTATAGAAAT, 68 arrays, 16 vOTUs) and 35
+    (TAAAGCCATGTGCCG, 36 arrays, 12 vOTUs) lie ~6.5 kb and ~1.9 kb downstream of a UG27-class
+    RT in every member with an RT call (66 of 68 and 36 of 36). With family 65, three unrelated
+    repeat families accompany UG27 RTs in MGV. Whether they are the ncRNA arrays of the 2026-09-22
+    preprint or additional ones needs that preprint (bioRxiv fetch still blocked by HTTP 429).
+  - ECF sigma factor beside 96-99% of members of families 4 (TTAGCATAAAAGCATTTA, 258 arrays,
+    20 vOTUs) and 3 (36-nt CRISPR-like repeat, 283 arrays, 55 vOTUs): unexplained, a lead.
+  - No family lacks every annotation and also recurs widely: the strongest remaining leads are
+    the UG27 families and the ECF-sigma association, all to be checked against the literature.
+- GPD palindromic lead (uvig_591988, uvig_579515): both beside TnpB (OrfB_IS605 with a
+  Cas12f1-like TNB domain), an IS200/IS605-family element whose ends are palindromic; most likely
+  transposon-associated, not ART. Both genomes also encode multi-subunit RNA polymerase domains
+  (jumbo-phage-like).
