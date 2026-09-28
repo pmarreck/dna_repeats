@@ -297,13 +297,14 @@ check di-seed-matters "$([ "$(sha256sum <"$di/s1.fa")" != "$(sha256sum <"$di/s3.
 check di-changes-sequence "$([ "$(grep -v '^>' "$di/s1.fa" | tr -d '\n')" != "$(grep -v '^>' "$di/p.fa" | tr -d '\n' | tr a-z A-Z)" ] && echo differ)" differ
 
 # art-context-run: only the chosen families' members, only their nearby proteins scanned
-# (a fake hmmscan records what it was given and reports one domain per protein).
+# (a fake hmmsearch reports one domain per protein, in hmmsearch's column order: the protein
+# is the target, the domain the query).
 cr="$pdir/cr"
 mkdir -p "$cr/census" "$cr/bin"
 cp "$cx/genes.gff" "$cr/census/genes.gff"
 printf '>g1__1__20000_1 # x\nMK\n>g1__1__20000_2 # x\nMR\n>g1__1__20000_3 # x\nMS\n>g1__8001__30000_1 # x\nMS\n>g2__1__5000_1 # x\nMT\n' >"$cr/census/proteins.faa"
-printf '#!%s\nwhile [ $# -gt 1 ]; do case $1 in --tblout) t=$2; shift ;; esac; shift; done\ngrep "^>" "$1" | sed "s/^>\\([^ ]*\\).*/Dom PF0 \\1 - 1e-9 50/" >"$t"\n' "$sh" >"$cr/bin/hmmscan"
-chmod +x "$cr/bin/hmmscan"
+printf '#!%s\nwhile [ $# -gt 1 ]; do case $1 in --tblout) t=$2; shift ;; esac; shift; done\ngrep "^>" "$1" | sed "s/^>\\([^ ]*\\).*/\\1 - Dom PF0 1e-9 50/" >"$t"\n' "$sh" >"$cr/bin/hmmsearch"
+chmod +x "$cr/bin/hmmsearch"
 got=$(PATH="$cr/bin:$PATH" IN_NIX_SHELL=1 PFAM_A_HMM=unused bash bench/art-context-run "$cx/members.tsv" "$cr/census" "$cr/out" -j 2 2 2>"$cr/err")
 check art-context-run-summary "$got" "families: 1; members: 1; proteins scanned: 1"
 check art-context-run-context "$(cat "$cr/out/context.tsv")" "$(printf '2\t1\tDom\t1\t1.00')"
