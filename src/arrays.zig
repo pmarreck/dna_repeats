@@ -1150,3 +1150,42 @@ test "consensus: majority base per column, ties to the earlier of ACGT, no base 
     // col0 A,A,C,C tie -> A; col1 A,C,G,T tie -> A; col2 G,C,T,T -> T; col3 N -> N.
     try testing.expectEqualStrings("AATN", got);
 }
+
+test "an ART-like array (conserved core and flanks, degenerate edges, long spacers) passes relaxed filters only" {
+    var buf: [1500]u8 = undefined;
+    fillRandom(&buf, 251);
+    var repeat: [30]u8 = undefined;
+    fillRandom(&repeat, 252);
+    var flank: [24]u8 = undefined; // conserved sequence at the start of every spacer
+    fillRandom(&flank, 253);
+    var at: usize = 30;
+    var starts: [5]usize = undefined;
+    for (0..5) |k| {
+        var copy = repeat;
+        // Degenerate edges: two copies differ at the first two columns, two at the last two.
+        if (k % 2 == 0 and k > 0) for ([_]usize{ 0, 1, 28, 29 }) |c| {
+            copy[c] = if (copy[c] == 'A') 'C' else 'A';
+        };
+        starts[k] = at;
+        at = put(&buf, at, &copy);
+        if (k == 4) break;
+        var s: [180]u8 = undefined;
+        fillRandom(&s, 260 + k);
+        @memcpy(s[6..][0..flank.len], &flank); // spacers share this flank, so they share 10-mers
+        at = put(&buf, at, &s);
+    }
+    const art: Params = .{ .min_spacer = 60, .max_spacer = 450, .min_unit = 15, .min_repeat_conservation = 0.8, .max_shared_spacer_fraction = 1.0 };
+    const found = try callOn(&buf, art);
+    defer freeArrays(testing.allocator, found);
+    try testing.expectEqual(@as(usize, 1), found.len);
+    // Edge columns agree in only 3 of 5 copies (under consensus_agreement), so the reported
+    // repeat is the conserved middle, columns 2..27: copies start 2 bases in.
+    for (starts, found[0].positions) |s, p| try testing.expectEqual(s + 2, p);
+    try testing.expectEqual(@as(usize, 26), found[0].unit_len);
+    var crispr_filters = art;
+    crispr_filters.min_repeat_conservation = 0.9;
+    crispr_filters.max_shared_spacer_fraction = 0.2;
+    const rejected = try callOn(&buf, crispr_filters);
+    defer freeArrays(testing.allocator, rejected);
+    try testing.expectEqual(@as(usize, 0), rejected.len);
+}

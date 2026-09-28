@@ -19,6 +19,7 @@ pub const usage =
     \\  --min-unit N         shortest array repeat after extension (default 0)
     \\  --crispr             CRISPR preset: --arrays, repeats 23..47 (seeds from 18), spacers 26..64
     \\  --sensitive          array seeds from 14 bases: finds more degraded arrays, a few more false ones
+    \\  --art                ART preset: arrays of 15..49 nt repeats 100..450 nt apart (Yoon et al. 2026)
     \\  -j, --threads N      worker threads (default: one per CPU)
     \\  -o, --output PATH    write results to PATH ('-' or @stdout: stdout; @stderr: stderr)
     \\  --progress           always show progress on stderr
@@ -69,6 +70,10 @@ pub const Config = struct {
     min_unit: usize = 0,
     /// Array seeds from `sensitive_seed` bases (finds more degraded arrays).
     sensitive: bool = false,
+    /// Lowest mean copy identity to the consensus, and largest share of spacer pairs
+    /// sharing a 10-mer (array filters; presets set them).
+    min_conservation: f64 = 0.9,
+    max_shared_spacer_fraction: f64 = 0.2,
 };
 
 /// Seed length under --sensitive: at 8% substitution it recalls 16 of 20 planted arrays
@@ -134,6 +139,22 @@ pub fn parseArgs(args: []const []const u8) ParseError!Config {
             cfg.min_spacer = 26; // MinCED's default
             cfg.max_gap = 64; // PILER-CR's default
             cfg.min_unit = 23; // MinCED's shortest repeat
+            cfg.min_conservation = 0.9; // PILER-CR's -mincons
+            cfg.max_shared_spacer_fraction = 0.2;
+        } else if (eql(a, "--art")) {
+            // Array-associated reverse transcriptase arrays (Yoon et al. 2026): repeats of
+            // 15..49 nt with a conserved core and looser edges, copies 100..450 nt apart
+            // start to start, at least 3 copies; seeds from their exact 12-nt word rule.
+            // Copies need >= 21 of 26 bases to match (their copy criterion); spacers carry
+            // conserved repeat flanks, so the shared-sequence spacer filter is off.
+            cfg.arrays = true;
+            cfg.min_len = 12;
+            cfg.max_len = 49;
+            cfg.min_spacer = 60;
+            cfg.max_gap = 450;
+            cfg.min_unit = 15;
+            cfg.min_conservation = 0.8;
+            cfg.max_shared_spacer_fraction = 1.0;
         } else if (eql(a, "--min-copies") or eql(a, "--min-spacer") or eql(a, "--min-unit")) {
             i += 1;
             if (i >= args.len) return error.MissingValue;
@@ -544,4 +565,22 @@ test "--sensitive: array seeds from 14 bases in any position; needs --arrays or 
     // A lower explicit seed length stays.
     try testing.expectEqual(@as(usize, 12), (try parseArgs(&.{ "x", "--crispr", "--min-len", "12", "--sensitive" })).min_len);
     try testing.expectError(error.SensitiveNeedsArrays, parseArgs(&.{ "x", "--sensitive" }));
+}
+
+test "--art preset: ART-like arrays (Yoon et al. 2026), later options win" {
+    const a = try parseArgs(&.{ "x", "--art" });
+    try testing.expect(a.arrays);
+    try testing.expectEqual(@as(usize, 12), a.min_len);
+    try testing.expectEqual(@as(usize, 49), a.max_len);
+    try testing.expectEqual(@as(usize, 60), a.min_spacer);
+    try testing.expectEqual(@as(usize, 450), a.max_gap);
+    try testing.expectEqual(@as(usize, 15), a.min_unit);
+    try testing.expectEqual(@as(f64, 0.8), a.min_conservation);
+    try testing.expectEqual(@as(f64, 1.0), a.max_shared_spacer_fraction);
+    // CRISPR keeps the array caller's defaults for the two filters ART relaxes.
+    const c = try parseArgs(&.{ "x", "--art", "--crispr" });
+    try testing.expectEqual(@as(f64, 0.9), c.min_conservation);
+    try testing.expectEqual(@as(f64, 0.2), c.max_shared_spacer_fraction);
+    try testing.expectEqual(@as(usize, 23), c.min_unit);
+    try testing.expectEqual(@as(usize, 20), (try parseArgs(&.{ "x", "--art", "--min-unit", "20" })).min_unit);
 }
