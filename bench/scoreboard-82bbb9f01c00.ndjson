@@ -66,3 +66,14 @@
 {"commit":"fcad6b7","when":"2026-09-26T23:12:07-04:00","machine":"82bbb9f01c00","set":"heldout3","tool":"pilercr","el4":73,"recalled":63,"predictions":75,"correct":71,"wall_s":24.93,"peak_kb":25912}
 {"commit":"fcad6b7","when":"2026-09-26T23:12:07-04:00","machine":"82bbb9f01c00","set":"heldout3","tool":"dnarepeats","el4":73,"recalled":68,"predictions":74,"correct":71,"wall_s":2.34,"peak_kb":11292}
 {"commit":"fcad6b7","when":"2026-09-26T23:12:07-04:00","machine":"82bbb9f01c00","set":"heldout3","tool":"dnarepeats_raw","el4":73,"recalled":62,"predictions":84818,"correct":5027,"wall_s":2.61,"peak_kb":11292}
+{"commit":"67c4e6f","when":"2026-09-27T23:12:38-04:00","machine":"82bbb9f01c00","set":"dev","tool":"dnarepeats_sensitive","el4":25,"recalled":24,"predictions":26,"correct":24,"wall_s":0.41,"peak_kb":9232}
+{"commit":"67c4e6f","when":"2026-09-27T23:13:47-04:00","machine":"82bbb9f01c00","set":"shuffled","tool":"dnarepeats_sensitive","el4":0,"recalled":0,"predictions":0,"correct":0,"wall_s":0.36,"peak_kb":8216}
+{"commit":"67c4e6f","when":"2026-09-27T23:15:05-04:00","machine":"82bbb9f01c00","set":"heldout3","tool":"dnarepeats_sensitive","el4":73,"recalled":68,"predictions":74,"correct":71,"wall_s":1.8,"peak_kb":11288}
+{"commit":"67c4e6f","when":"2026-09-27T23:16:19-04:00","machine":"82bbb9f01c00","set":"div-0","tool":"dnarepeats_sensitive","el4":20,"recalled":20,"predictions":20,"correct":20,"wall_s":0.02,"peak_kb":2124}
+{"commit":"67c4e6f","when":"2026-09-27T23:17:28-04:00","machine":"82bbb9f01c00","set":"div-2","tool":"dnarepeats_sensitive","el4":20,"recalled":20,"predictions":20,"correct":20,"wall_s":0.02,"peak_kb":2124}
+{"commit":"67c4e6f","when":"2026-09-27T23:18:37-04:00","machine":"82bbb9f01c00","set":"div-4","tool":"dnarepeats_sensitive","el4":20,"recalled":20,"predictions":20,"correct":20,"wall_s":0.02,"peak_kb":2124}
+{"commit":"67c4e6f","when":"2026-09-27T23:19:47-04:00","machine":"82bbb9f01c00","set":"div-6","tool":"dnarepeats_sensitive","el4":20,"recalled":19,"predictions":20,"correct":20,"wall_s":0.02,"peak_kb":2124}
+{"commit":"67c4e6f","when":"2026-09-27T23:20:55-04:00","machine":"82bbb9f01c00","set":"div-8","tool":"dnarepeats_sensitive","el4":20,"recalled":16,"predictions":19,"correct":19,"wall_s":0.02,"peak_kb":2124}
+{"commit":"67c4e6f","when":"2026-09-27T23:22:04-04:00","machine":"82bbb9f01c00","set":"div-10","tool":"dnarepeats_sensitive","el4":20,"recalled":8,"predictions":9,"correct":9,"wall_s":0.02,"peak_kb":2124}
+{"commit":"67c4e6f","when":"2026-09-27T23:23:12-04:00","machine":"82bbb9f01c00","set":"div-12","tool":"dnarepeats_sensitive","el4":20,"recalled":1,"predictions":3,"correct":3,"wall_s":0.02,"peak_kb":2124}
+{"commit":"67c4e6f","when":"2026-09-27T23:24:21-04:00","machine":"82bbb9f01c00","set":"div-15","tool":"dnarepeats_sensitive","el4":20,"recalled":0,"predictions":0,"correct":0,"wall_s":0.02,"peak_kb":2124}
