@@ -170,27 +170,41 @@ test "FASTA: errors keep the raw offset" {
     try testing.expectEqual(@as(usize, 0), diag.offset);
 }
 
-// Classifier over the full byte range on a sequence line.
+// Classifier over the full byte range on a sequence line: each byte's class and output
+// base checked against a table written from the spec, so a byte moved between classes fails.
 test "FASTA: every sequence byte value is classified" {
-    var base: usize = 0;
-    var ambiguous: usize = 0;
-    var skipped: usize = 0;
-    var rejected: usize = 0;
+    var counts = [_]usize{0} ** 4; // base, ambiguous, skipped, rejected
     for (0..256) |b| {
         if (b == '\n' or b == '>') continue; // line structure, not sequence content
+        const byte: u8 = @intCast(b);
+        const want: struct { class: usize, out: u8 } =
+            if (std.mem.indexOfScalar(u8, "ACGTacgt", byte) != null) .{ .class = 0, .out = std.ascii.toUpper(byte) }
+            else if (std.mem.indexOfScalar(u8, "NRYKMSWBDHVnrykmswbdhv", byte) != null) .{ .class = 1, .out = 'N' }
+            else if (std.mem.indexOfScalar(u8, " \t\x0b\x0c\r-", byte) != null) .{ .class = 2, .out = 0 }
+            else .{ .class = 3, .out = 0 };
         var buf: [8]u8 = undefined;
         var diag: Diagnostic = .{};
-        const raw = [_]u8{ '>', 'x', '\n', @intCast(b) };
+        const raw = [_]u8{ '>', 'x', '\n', byte };
         if (parseFasta(testing.allocator, &raw, &buf, &diag)) |recs| {
             defer freeRecords(testing.allocator, recs);
-            const s = recs[0].seq;
-            if (s.len == 0) skipped += 1 else if (s[0] == 'N') ambiguous += 1 else base += 1;
-        } else |_| rejected += 1;
+            const seq = recs[0].seq;
+            if (want.class == 2) {
+                try testing.expectEqual(@as(usize, 0), seq.len);
+            } else {
+                testing.expect(want.class < 2 and seq.len == 1 and seq[0] == want.out) catch |e| {
+                    std.debug.print("byte 0x{x:0>2}: got \"{s}\", want class {d}\n", .{ byte, seq, want.class });
+                    return e;
+                };
+            }
+        } else |_| {
+            testing.expectEqual(@as(usize, 3), want.class) catch |e| {
+                std.debug.print("byte 0x{x:0>2} rejected, want class {d}\n", .{ byte, want.class });
+                return e;
+            };
+        }
+        counts[want.class] += 1;
     }
-    try testing.expectEqual(@as(usize, 8), base); // ACGTacgt
-    try testing.expectEqual(@as(usize, 22), ambiguous); // NRYKMSWBDHV, both cases
-    try testing.expectEqual(@as(usize, 6), skipped); // space \t \v \f \r -
-    try testing.expectEqual(@as(usize, 254 - 36), rejected);
+    try testing.expectEqualSlices(usize, &.{ 8, 22, 6, 254 - 36 }, &counts);
 }
 
 test "normalize works in place (output aliasing input)" {

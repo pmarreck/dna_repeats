@@ -12,6 +12,21 @@ const Api = ch.Api(8);
 
 pub const Error = error{ Compile, OutOfMemory, MatchFailed };
 
+/// A pcre2_jit_compile result: running out of memory is an error; any other failure (no
+/// JIT support on this platform, an unsupported option) leaves the interpreter to match,
+/// which gives the same results more slowly.
+fn jitStatus(rc: c_int) Error!void {
+    if (rc == c.PCRE2_ERROR_NOMEMORY) return error.OutOfMemory;
+}
+
+/// Capture group number of a named group; a missing name (a negative PCRE2 code) is a
+/// Compile error rather than an out-of-range cast.
+fn groupNumber(code: *c.pcre2_code_8, name: [*:0]const u8) Error!u32 {
+    const n = c.pcre2_substring_number_from_name_8(code, name);
+    if (n < 0) return error.Compile;
+    return @intCast(n);
+}
+
 /// A negative pcre2_match result as an Error: running out of heap (NOMEMORY, HEAPLIMIT) is
 /// OutOfMemory, so callers can report it as such; every other failure is MatchFailed.
 fn matchError(rc: c_int) Error {
@@ -50,16 +65,11 @@ pub const Finder = struct {
         var off: usize = 0;
         const code = c.pcre2_compile_8(pattern.ptr, pattern.len, options, &err, &off, null) orelse return error.Compile;
         errdefer c.pcre2_code_free_8(code);
-        // Best effort: without JIT support pcre2_match falls back to the interpreter.
-        _ = c.pcre2_jit_compile_8(code, c.PCRE2_JIT_COMPLETE);
+        try jitStatus(c.pcre2_jit_compile_8(code, c.PCRE2_JIT_COMPLETE));
+        const unit_group = try groupNumber(code, "unit");
+        const hit_group = try groupNumber(code, "hit");
         const md = c.pcre2_match_data_create_from_pattern_8(code, null) orelse return error.OutOfMemory;
-        return .{
-            .code = code,
-            .md = md,
-            .len = len,
-            .unit_group = @intCast(c.pcre2_substring_number_from_name_8(code, "unit")),
-            .hit_group = @intCast(c.pcre2_substring_number_from_name_8(code, "hit")),
-        };
+        return .{ .code = code, .md = md, .len = len, .unit_group = unit_group, .hit_group = hit_group };
     }
 
     pub fn deinit(self: Finder) void {
@@ -733,4 +743,22 @@ test "matchError: PCRE2 out-of-memory is OutOfMemory; every other failure code i
         .{ .rc = c.PCRE2_ERROR_BADOPTION, .want = error.MatchFailed },
     };
     for (cases) |k| try testing.expectEqual(k.want, matchError(k.rc));
+}
+
+test "groupNumber: a missing group name is a Compile error, a present one its number" {
+    var err: c_int = 0;
+    var off: usize = 0;
+    const pattern = "(?<unit>A)(?<hit>C)";
+    const code = c.pcre2_compile_8(pattern, pattern.len, 0, &err, &off, null) orelse return error.Compile;
+    defer c.pcre2_code_free_8(code);
+    try testing.expectEqual(@as(u32, 1), try groupNumber(code, "unit"));
+    try testing.expectEqual(@as(u32, 2), try groupNumber(code, "hit"));
+    try testing.expectError(error.Compile, groupNumber(code, "missing"));
+}
+
+test "jitStatus: JIT out of memory is OutOfMemory; success and every other code fall back to the interpreter" {
+    try jitStatus(0);
+    try testing.expectError(error.OutOfMemory, jitStatus(c.PCRE2_ERROR_NOMEMORY));
+    try jitStatus(c.PCRE2_ERROR_JIT_BADOPTION);
+    try jitStatus(c.PCRE2_ERROR_BADOPTION);
 }
