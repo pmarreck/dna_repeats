@@ -29,7 +29,25 @@ step() { # step NAME CMD...: run, record wall seconds, fail loudly
 	printf '%s\t%s\n' "$name" "$(awk -v a="$t0" -v b="$t1" 'BEGIN {printf "%.1f", b - a}')" | tee -a "$out/times.tsv" >&2
 }
 
-arrays() { cat_input | "$bin" --no-progress --art -j "$threads" - >"$out/arrays.tsv"; }
+# Records are dealt round-robin to one single-threaded dna-repeats per worker through FIFOs:
+# phage collections are many small records, which threads within one record cannot split.
+deal() { # deal N PREFIX: FASTA on stdin -> PREFIX.0 .. PREFIX.N-1, whole records round-robin
+	awk -v n="$1" -v p="$2" '/^>/ {k = (r++) % n} {print > (p "." k)}'
+}
+arrays() {
+	local i pids=()
+	for ((i = 0; i < threads; i++)); do
+		mkfifo "$out/in.$i" || return 1
+		"$bin" --no-progress --art -j 1 - <"$out/in.$i" >"$out/arrays.$i" &
+		pids+=($!)
+	done
+	cat_input | deal "$threads" "$out/in"
+	local failed=0
+	for i in "${pids[@]}"; do wait "$i" || failed=1; done
+	for ((i = 0; i < threads; i++)); do cat "$out/arrays.$i"; done >"$out/arrays.tsv"
+	for ((i = 0; i < threads; i++)); do mv "$out/in.$i" "$out/arrays.$i" "$HOME/.Trash/" 2>/dev/null || true; done
+	return "$failed"
+}
 # Windows named REC__WSTART__WEND around each array, one record in memory at a time.
 windows() {
 	cat_input | awk -v W="$WINDOW" -v arrays="$out/arrays.tsv" '
@@ -46,7 +64,20 @@ windows() {
 		{ gsub(/[ \t\r]/, ""); seq = seq toupper($0) }
 		END { flush() }' >"$out/windows.fa"
 }
-genes() { prodigal -q -p meta -i "$out/windows.fa" -f gff -o "$out/genes.gff" -a "$out/proteins.faa"; }
+genes() {
+	local i pids=() failed=0
+	deal "$threads" "$out/windows" <"$out/windows.fa"
+	for ((i = 0; i < threads; i++)); do
+		[ -s "$out/windows.$i" ] || continue
+		prodigal -q -p meta -i "$out/windows.$i" -f gff -o "$out/genes.$i" -a "$out/proteins.$i" &
+		pids+=($!)
+	done
+	for i in "${pids[@]}"; do wait "$i" || failed=1; done
+	for ((i = 0; i < threads; i++)); do [ -s "$out/windows.$i" ] && cat "$out/genes.$i"; done >"$out/genes.gff"
+	for ((i = 0; i < threads; i++)); do [ -s "$out/windows.$i" ] && cat "$out/proteins.$i"; done >"$out/proteins.faa"
+	for ((i = 0; i < threads; i++)); do mv "$out/windows.$i" "$out/genes.$i" "$out/proteins.$i" "$HOME/.Trash/" 2>/dev/null || true; done
+	return "$failed"
+}
 hits() { hmmsearch --noali --cpu "$threads" -E 1e-5 --tblout "$out/hits.tbl" "$hmm" "$out/proteins.faa" >/dev/null; }
 link() { luajit bench/art-link "$out/arrays.tsv" "$out/genes.gff" "$out/hits.tbl" >"$out/census.tsv"; }
 
