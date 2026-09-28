@@ -48,8 +48,8 @@ he asked for field-appropriate additions, 2026-09-26, marked "added"):
 
 ## Constraints
 
-- Benchmarks use public genomes and public annotations only. The private sample
-  ($HOME/Documents/dna_sample.txt) never enters the scoreboard or the repo.
+- Benchmarks use public genomes and public annotations only. Peter's private sample
+  never enters the scoreboard or the repo.
 - Every claimed win is reproducible from one command, with tool versions,
   inputs (by accession and checksum), machine and commit recorded.
 - PCRE2 has no fuzzy matching, so mismatch tolerance needs its own technique

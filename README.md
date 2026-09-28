@@ -157,4 +157,38 @@ genomes) 12.7 times faster.
 ./bm       # scaling, speed and memory gates (ReleaseFast)
 ```
 
-Built by Peter Marreck with Claude (Anthropic).
+## Who built this
+
+[Peter Marreck](https://github.com/pmarreck) designed and directed this project and wrote
+it with Claude Opus 5.5 (Anthropic) as a pair programmer. It began as a challenge: Peter read
+Anthropic's post on [Claude discovering a novel enzyme
+system](https://www.anthropic.com/news/claude-discovers-novel-enzyme-system) and set out to
+show what a human steering Claude could do in genomics. Peter's contributions shaped the
+results:
+
+- **The core idea.** Peter added a capture-history feature to
+  [his fork of PCRE2](https://github.com/pmarreck/pcre2/tree/capture-history), so one match
+  of a repeated group returns every capture instead of only the last, and proposed using a
+  single such regular expression to find all copies of a repeat at once. That is still how
+  dna-repeats finds repeat families.
+- **The search design.** Scan each repeat length in turn, from long to short, with a
+  bounded gap between copies so run time stays predictable, keeping shorter repeats nested
+  inside longer ones as their own results.
+- **The goal and the yardstick.** Peter set out to beat the existing tools, chose CRISPR
+  finders as the first opponents and CRISPRCasdb's highest-evidence arrays as ground truth,
+  and defined the win as a point on a multidimensional chart (recall, precision, speed,
+  memory and tolerance of divergent copies) rather than one headline number.
+- **The pure-Zig speedup.** Peter predicted that code written specifically for DNA could
+  beat the regex engine and asked for 2-bit base packing to be explored. The 2-bit k-mer
+  prefilter that came out of it made the single-threaded run 12.7 times faster.
+- **The multicore numbers.** Peter asked for results on one core and on all of them, guessed
+  that fewer than all 128 threads might be faster (48 was, by 15%), and asked whether the
+  competing tools run multithreaded (neither does).
+- **Engineering discipline.** Test-driven development throughout, correctness checked in
+  Zig's Debug mode and benchmarks run only in its fastest mode, attention to memory use, a
+  `--sensitive` mode for degraded arrays, and a single command anyone can run to confirm
+  the findings.
+
+## License
+
+[MIT](LICENSE), copyright 2026 Peter Marreck.

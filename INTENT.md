@@ -24,8 +24,8 @@ the counterexamples that ruled them out are recorded in the pcre2 fork's
   IUPAC ambiguity codes become N, which keeps its position but never matches
   (2026-09-26, following Peter's N question; wildcard matching belongs to the
   mismatch mode).
-- The local corpus `$HOME/Documents/dna_sample.txt` is read-only and must not
-  be published or committed. Derived copies stay private.
+- Peter's private local DNA sample is read-only and must not be published or
+  committed. Derived copies stay private.
 - Speed improvements are hypotheses until measured.
 
 ## How success is verified
