@@ -160,11 +160,18 @@ genomes) 12.7 times faster.
 ## Who built this
 
 [Peter Marreck](https://github.com/pmarreck) designed and directed this project and wrote
-it with Claude Opus 5.5 (Anthropic) as a pair programmer. It began as a challenge: Peter read
-Anthropic's post on [Claude discovering a novel enzyme
-system](https://www.anthropic.com/news/claude-discovers-novel-enzyme-system) and set out to
-show what a human steering Claude could do in genomics. Peter's contributions shaped the
-results:
+it with Claude Opus 5.5 (Anthropic) as a pair programmer. It began the day after Anthropic
+published [Claude discovers a novel enzyme
+system](https://www.anthropic.com/news/claude-discovers-novel-enzyme-system) (23 September
+2026), in which Claude found array-associated reverse transcriptases: phage systems that
+carry "a long array of evenly spaced DNA repeat sequences reminiscent of CRISPR arrays". That
+search pointed Claude directly at the data, with roughly 950 agents working for 21 hours and
+210 million tokens, and human involvement "limited to the initial prompt and the lab work".
+
+Peter took the opposite approach: steer Claude to build a better tool first, with the data in
+mind, and only then point the tool at the data. The result detects exactly this kind of
+structure, arrays of evenly spaced repeats, in about 0.14 seconds per bacterial genome on
+one core, and anyone can rerun and check it. Peter's contributions shaped the results:
 
 - **The core idea.** Peter added a capture-history feature to
   [his fork of PCRE2](https://github.com/pmarreck/pcre2/tree/capture-history), so one match
