@@ -13,6 +13,7 @@ annotate=[
 	bench/art-check = ART locus check: --art arrays within 6 kb upstream of each RT (strand-aware), per bench/art_loci.tsv
 	bench/art-cluster = Repeat families across an ART census: canonical 8-mer index, containment identity on both strands, union-find
 	bench/art-context = Gene context of repeat families: proteins near members (ids) and per-family Pfam domain fractions (tally)
+	bench/art-context-run = Driver: Pfam-A hmmscan of proteins near chosen repeat families, per-family domain fractions
 	bench/art-link = Joins arrays with gene calls and RT hits: RT relation (upstream/near/none), distance, E-value, coding fraction
 	bench/art-reps = Representative arrays for Rfam/tRNA screening: per family in an art-cluster MEMBERS.tsv
 	bench/art-screen = Known-RNA screen of art-cluster families (intents/art_search.md): each family's

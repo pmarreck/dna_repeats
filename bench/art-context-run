@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Gene context of chosen repeat families (intents/art_search.md, ART 5d): the proteins within
+# 8 kb of every member (bench/art-context ids, cut from the census proteins.faa) scanned with
+# Pfam-A 38.2 (hmmscan, gathering thresholds), then per family the fraction of members with each
+# domain nearby (bench/art-context tally). Writes OUTDIR/{members.tsv,ids.txt,proteins.faa,
+# pfam.tbl,context.tsv}. usage:
+#   bench/art-context-run MEMBERS.tsv CENSUS_DIR OUTDIR [-j THREADS] FAMILY...
+#   env PFAM_A_HMM uses that (hmmpress-ed) model file instead of the pinned build.
+set -u
+cd "$(dirname "$0")/.." || exit 1
+[ -n "${IN_NIX_SHELL:-}" ] || exec nix develop -c "$0" "$@"
+usage="usage: art-context-run MEMBERS.tsv CENSUS_DIR OUTDIR [-j THREADS] FAMILY..."
+members=${1:?$usage} census=${2:?$usage} out=${3:?$usage}
+shift 3
+threads=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+[ "${1:-}" = "-j" ] && { threads=${2:?$usage}; shift 2; }
+[ $# -gt 0 ] || { echo "$usage" >&2; exit 2; }
+pfam=${PFAM_A_HMM:-}
+[ -n "$pfam" ] || { p=$(nix build .#pfamA --no-link --print-out-paths) && pfam=$p/Pfam-A.hmm; } || exit 1
+mkdir -p "$out" || exit 1
+awk -F'\t' -v list="$*" 'BEGIN {n = split(list, f, " "); for (i = 1; i <= n; i++) want[f[i]] = 1} $1 in want' "$members" >"$out/members.tsv"
+[ -s "$out/members.tsv" ] || { echo "art-context-run: no members in families: $*" >&2; exit 1; }
+luajit bench/art-context ids "$out/members.tsv" "$census/genes.gff" >"$out/ids.txt" || exit 1
+awk 'FILENAME == ARGV[1] {want[$1] = 1; next} /^>/ {keep = (substr($1, 2) in want)} keep' "$out/ids.txt" "$census/proteins.faa" >"$out/proteins.faa"
+if [ -s "$out/proteins.faa" ]; then
+	hmmscan --noali --cut_ga --cpu "$threads" --tblout "$out/pfam.tbl" "$pfam" "$out/proteins.faa" >/dev/null || { echo "art-context-run: hmmscan failed" >&2; exit 1; }
+else
+	: >"$out/pfam.tbl"
+fi
+luajit bench/art-context tally "$out/members.tsv" "$census/genes.gff" "$out/pfam.tbl" >"$out/context.tsv" || exit 1
+echo "families: $#; members: $(wc -l <"$out/members.tsv"); proteins scanned: $(wc -l <"$out/ids.txt")"
