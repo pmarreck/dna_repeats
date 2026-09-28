@@ -187,7 +187,7 @@ expect_rc $t 0 && expect_eq $t "$out" "" && pass $t
 
 t=sensitive-finds-degraded-array
 capture "$bin" --sensitive --crispr "$work/degraded.fa"
-expect_rc $t 0 && expect_eq $t "$(cut -f1-5,7 <<<"$out")" "deg	41	305	5	29	41,100,159,218,277" && pass $t
+expect_rc $t 0 && expect_eq $t "$out" "deg	41	305	5	29	$deg_a	41,100,159,218,277" && pass $t
 
 t=sensitive-needs-arrays
 capture "$bin" --sensitive "$work/degraded.fa"

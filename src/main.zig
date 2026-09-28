@@ -215,9 +215,9 @@ pub fn main(init: std.process.Init) !u8 {
                 for (called) |one| {
                     try out.writeAll(if (first) "\n" else ",\n");
                     first = false;
-                    try cli.writeJsonArray(out, record, subject, one);
+                    try cli.writeJsonArray(out, record, one);
                 }
-            } else try cli.writeArraysTsv(out, record, subject, called);
+            } else try cli.writeArraysTsv(out, record, called);
             continue;
         }
         var len = max_len;

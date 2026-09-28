@@ -38,15 +38,20 @@ pub const Array = struct {
     start: usize,
     end: usize,
     copies: usize,
-    /// Longest unit among the merged families, and where one copy of it starts.
     unit_len: usize,
-    unit_pos: usize,
+    /// Majority consensus of the best candidate's copies (unit_len bases); owned.
+    unit: []u8,
     /// Start of every copy, ascending (0-based); owned, see freeArrays.
     positions: []usize,
+
+    fn deinit(self: Array, gpa: Allocator) void {
+        gpa.free(self.unit);
+        gpa.free(self.positions);
+    }
 };
 
 pub fn freeArrays(gpa: Allocator, list: []const Array) void {
-    for (list) |a| gpa.free(a.positions);
+    for (list) |a| a.deinit(gpa);
     gpa.free(list);
 }
 
@@ -101,7 +106,7 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
     // degraded copy) into their union; judge each merged array by its best candidate.
     var out: std.ArrayList(Array) = .empty;
     errdefer {
-        for (out.items) |a| gpa.free(a.positions);
+        for (out.items) |a| a.deinit(gpa);
         out.deinit(gpa);
     }
     var positions: std.ArrayList(usize) = .empty;
@@ -127,7 +132,9 @@ pub fn callArrays(gpa: Allocator, subject: []const u8, families: []const fam.Fam
         if (accepted(evidence, params)) {
             const owned = try gpa.dupe(usize, positions.items);
             errdefer gpa.free(owned);
-            try out.append(gpa, .{ .start = cands.items[i].start, .end = end, .copies = copies, .unit_len = unit_len, .unit_pos = best.seed, .positions = owned });
+            const unit = try gpa.dupe(u8, best.unit);
+            errdefer gpa.free(unit);
+            try out.append(gpa, .{ .start = cands.items[i].start, .end = end, .copies = copies, .unit_len = unit_len, .unit = unit, .positions = owned });
         }
         i = merged.next;
     }
@@ -764,7 +771,7 @@ test "neighboring arrays stay separate when a chance 2-copy run spans the gap be
     try testing.expectEqual(@as(usize, 5), arrays[1].copies);
 }
 
-test "the reported unit is an exact copy, not a degraded one found by extension" {
+test "the reported unit is the consensus, not a degraded copy found by extension" {
     var buf: [400]u8 = undefined;
     const bad = degraded(3);
     const subject = plantWith(&buf, 91, &.{ 50, 104, 160, 215 }, 50, &bad);
@@ -773,7 +780,7 @@ test "the reported unit is an exact copy, not a degraded one found by extension"
     try testing.expectEqual(@as(usize, 1), arrays.len);
     try testing.expectEqual(@as(usize, 50), arrays[0].start);
     try testing.expectEqual(@as(usize, 4), arrays[0].copies);
-    try testing.expectEqualStrings(dr, subject[arrays[0].unit_pos..][0..dr.len]);
+    try testing.expectEqualStrings(dr, arrays[0].unit);
 }
 
 test "coverage: half-open overlap at every boundary, and merging spans" {
@@ -892,6 +899,8 @@ test "copies past the seed's mismatch budget are found by re-extending with the 
     try testing.expectEqual(@as(usize, 1), arrays.len);
     try testing.expectEqualSlices(usize, &starts, arrays[0].positions);
     try testing.expectEqual(@as(usize, 34), arrays[0].unit_len);
+    // Both seed copies carry a mutation; the reported unit is the consensus.
+    try testing.expectEqualStrings(&repeat, arrays[0].unit);
 }
 
 test "consensus extension continues past one weakly agreeing column when strong ones follow" {
