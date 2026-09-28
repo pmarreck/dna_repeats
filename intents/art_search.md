@@ -105,3 +105,9 @@ for upstream of RTs.
   records, every 10th) gives 2,633 arrays and 234 RT-upstream; the same records shuffled
   (mononucleotide, per-record seeds) give 3 arrays, all minimal (3 copies of 15-nt AT-rich
   units), and 0 RT-upstream.
+- GPD census (Gut Phage Database, 142,809 genomes; 5 min on 64 workers): 15,291 arrays, 4,249
+  non-coding, 587 upstream of an RT: 549 DGR, 30 UG27, 5 retron-class, 1 GII-I, 1 GII-II, 1 UG12.
+  No non-coding retron-class (ART-like) array. The 5 retron-class arrays are 2-5 kb upstream and
+  54-94% inside predicted genes. One lead: uvig_591988 and uvig_579515 share a 27-nt repeat with a
+  near-palindromic core (TGAGCCTTTTAACGTCATGCTCAGGAC, 4 copies, ~5 kb upstream, coding 0.59);
+  unverified (the coding call may be Prodigal over-calling), not a finding.

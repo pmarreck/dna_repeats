@@ -16,7 +16,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 	- [ ] ART 3: pin INPHARED (all GenBank phage genomes) and scan it; time and memory for the whole collection.
 	- [x] ART 4: bench/art-census (dna-repeats --art, prodigal on ±8 kb windows, Pfam RVT_1 hmmsearch, bench/art-link tested on fixtures). On the 8 known genomes: all 8 have an array upstream of an RT, including LPJP1's second RT (array 518 bp upstream, 4 copies, 35 nt), which the RT-first held-out check missed; under 1 s total. (done 2026-09-28 10:25 EDT)
 	- [x] ART 5a: bench/art-cluster (repeat families on both strands, containment identity >= 0.8, labeled with bench/art_known.tsv); tested, 2 mutants killed. (done 2026-09-28 10:15 EDT)
-	- [ ] ART 5b: census runs: MGV done; INPHARED done (done 2026-09-28 12:00 EDT); shuffled MGV control done (0f17fa9); GPD downloading (1.35 of 1.55 GB); IMG/VR v4.1 when Peter has JGI access.
+	- [ ] ART 5b: census runs: MGV done; INPHARED done (done 2026-09-28 12:00 EDT); shuffled MGV control done (0f17fa9); GPD done (no ART-like array); IMG/VR v4.1 when Peter has JGI access.
 	- [x] ART 5c: art-cluster centroid clustering (10e8c91); art-screen with Rfam, ARAGORN and CRISPR columns (774f188, 24e2ffe). (done 2026-09-28 12:05 EDT)
 	- [ ] ART 5d: gene context of the top unexplained families (Pfam-A hmmscan of flanking proteins), then a dinucleotide-shuffle control.
 	- [ ] Long-period repeat census (Peter, 2026-09-28): units of 50..500 nt, copies up to several kb apart, across the same phage collections; cluster families and screen out known element classes (coding repeats, rRNA, insertion sequences) before calling anything novel. After the ART census.
