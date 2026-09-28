@@ -44,7 +44,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [x] CR4: --art help and comment: bounds are spacer 60..450 (start to start 60+L..450+L), copies need 23 of 26 (0.15), seeds shorter than min_unit need 4 copies, positional spacer filter stays on. (done 2026-09-28 16:37 EDT)
 - [ ] CR1b: update the published findings report artifact like the README (both precision readings; it still says fewer false ones).
 - [x] CR5: one definition of "6 kb upstream" for art-check and art-link (gap from array edge to RT start codon 1..6000, strand-aware); recheck the 8 loci and the census counts. (done 2026-09-28 16:45 EDT; 8 loci unchanged)
-- [ ] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N.
+- [x] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N. (done 2026-09-28 16:52 EDT)
 - [ ] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named.
 - [ ] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share.
 - [ ] CR9: do not install the explore tool; make the differential test exercise the production Finder pattern (CAPTURE_HISTORY, DOTALL gap, JIT) or say what it pins.

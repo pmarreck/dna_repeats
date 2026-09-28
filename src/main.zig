@@ -153,9 +153,10 @@ pub fn main(init: std.process.Init) !u8 {
     defer gpa.free(raw);
     // Normalized in place: output never overtakes input, so no second copy is needed.
     var diag: norm.Diagnostic = .{};
-    // FASTA when the first non-whitespace byte is '>'; otherwise one plain, strict sequence.
+    // FASTA when any line starts with '>' (so sequence before the first header is reported as
+    // that, not as a stray '>'); otherwise one plain, strict sequence.
     const trimmed = std.mem.trimStart(u8, raw, " \t\r\n");
-    const is_fasta = trimmed.len > 0 and trimmed[0] == '>';
+    const is_fasta = (trimmed.len > 0 and trimmed[0] == '>') or std.mem.indexOf(u8, raw, "\n>") != null;
     var single: [1]norm.Record = undefined;
     const records: []const norm.Record = if (is_fasta) norm.parseFasta(gpa, raw, raw, &diag) catch |e| switch (e) {
         error.OutOfMemory => return e,

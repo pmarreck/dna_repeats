@@ -82,7 +82,8 @@ repeat, and the start of every copy. That is *E. coli* K-12's two CRISPR arrays,
 | Every repeat family, not just arrays | `dna-repeats --min-len 12 --max-len 30 --max-gap 300 seq.fa` |
 
 Family output lists length, copy count, the repeated unit and its 0-based start offsets.
-Ambiguity codes (N, R, Y, ...) are kept as N and never match. Run `dna-repeats --help`
+In FASTA input, ambiguity codes (N, R, Y, ...) are kept as N and never match; plain
+input without headers accepts only A, C, G and T. Run `dna-repeats --help`
 for every option.
 
 ## Confirm the findings yourself

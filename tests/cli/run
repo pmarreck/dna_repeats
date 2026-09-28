@@ -161,7 +161,7 @@ expect_rc $t 0 && expect_eq $t "$(printf '%s' "$out" | jq -c '.[0]')" '{"record"
 t=fasta-sequence-before-header
 printf 'ACGT\n>x\nACGT\n' >"$work/bad.fa"
 capture "$bin" "$work/bad.fa"
-expect_rc $t 1 && expect_eq $t "$err" "dna-repeats: invalid byte 0x3e at input offset 5" && pass $t
+expect_rc $t 1 && expect_eq $t "$err" "dna-repeats: sequence before the first FASTA header at input offset 0" && pass $t
 
 # A planted array: 40 random bases, then 4 copies of a 29-base repeat separated by
 # distinct random 30-base spacers, then 40 random bases (integer LCG, same in every awk).
