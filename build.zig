@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    b.installArtifact(explore);
+    // A development tool, not the product: run it with `zig build explore`; not installed.
     const run_explore = b.addRunArtifact(explore);
     if (b.args) |args| run_explore.addArgs(args);
     b.step("explore", "Report where family rules disagree on small subjects").dependOn(&run_explore.step);
@@ -95,6 +95,7 @@ pub fn build(b: *std.Build) void {
     const build_opts = b.addOptions();
     build_opts.addOption([]const u8, "version", "0.1.0");
     exe_mod.addOptions("build_options", build_opts);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = exe_mod })).step);
     const exe = b.addExecutable(.{ .name = "dna-repeats", .root_module = exe_mod });
     b.installArtifact(exe);
     const run_exe = b.addRunArtifact(exe);

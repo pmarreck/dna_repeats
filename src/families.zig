@@ -74,7 +74,10 @@ pub fn families(gpa: Allocator, subject: []const u8, len: usize, max_gap: usize,
                         continue;
                     }
                     covered_until = c[c.len - 1] + len;
-                    try out.append(gpa, .{ .len = len, .positions = c });
+                    out.append(gpa, .{ .len = len, .positions = c }) catch |e| {
+                        gpa.free(c);
+                        return e;
+                    };
                 }
             },
             .maximal_chains => {
@@ -85,7 +88,10 @@ pub fn families(gpa: Allocator, subject: []const u8, len: usize, max_gap: usize,
                         gpa.free(c);
                         continue;
                     }
-                    try out.append(gpa, .{ .len = len, .positions = c });
+                    out.append(gpa, .{ .len = len, .positions = c }) catch |e| {
+                        gpa.free(c);
+                        return e;
+                    };
                 }
             },
         }
@@ -198,7 +204,8 @@ fn appendSplit(gpa: Allocator, out: *std.ArrayList(Family), positions: []const u
         var j = i + 1;
         while (j < positions.len and positions[j] <= positions[j - 1] + len + max_gap) : (j += 1) {}
         if (j - i >= 2) {
-            try out.append(gpa, .{ .len = len, .positions = try gpa.dupe(usize, positions[i..j]) });
+            try out.ensureUnusedCapacity(gpa, 1); // reserve first so the copy is never unowned
+            out.appendAssumeCapacity(.{ .len = len, .positions = try gpa.dupe(usize, positions[i..j]) });
         }
         i = j;
     }
@@ -332,4 +339,20 @@ test "units containing a non-base byte (N) never form families" {
     try testing.expectEqual(@as(usize, 2), some.len);
     try testing.expectEqualSlices(usize, &.{ 0, 3 }, some[0].positions);
     try testing.expectEqualSlices(usize, &.{ 2, 5 }, some[1].positions);
+}
+
+test "an allocation failure anywhere, under every rule, is OutOfMemory and leaks nothing" {
+    const subject = "ACGTACGTTTACGTAAACGTACGTACGT";
+    inline for (std.meta.fields(Rule)) |field| {
+        const rule: Rule = @enumFromInt(field.value);
+        var i: usize = 0;
+        while (true) : (i += 1) {
+            var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = i });
+            const gpa = failing.allocator();
+            if (families(gpa, subject, 4, 6, rule)) |got| {
+                freeFamilies(gpa, got);
+                if (!failing.has_induced_failure) break;
+            } else |e| try std.testing.expectEqual(error.OutOfMemory, e);
+        }
+    }
 }

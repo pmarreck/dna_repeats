@@ -71,6 +71,16 @@ fn sameFile(io: std.Io, arena: std.mem.Allocator, output: []const u8, input: []c
     const in_real = cwd.realPathFileAlloc(io, input, arena) catch return false;
     return std.mem.eql(u8, out_real, in_real);
 }
+/// What went wrong in the repeat search, for the user instead of a Zig error trace.
+fn finderErrorMessage(e: (finder.Error || std.Thread.SpawnError)) []const u8 {
+    return switch (e) {
+        error.OutOfMemory => "out of memory",
+        error.MatchFailed => "pattern matching failed (a PCRE2 limit was reached)",
+        error.Compile => "could not compile the search pattern",
+        else => "could not start a worker thread",
+    };
+}
+
 pub fn main(init: std.process.Init) !u8 {
     const gpa = init.gpa;
     const io = init.io;
@@ -198,10 +208,16 @@ pub fn main(init: std.process.Init) !u8 {
         // each length then probes only those offsets, lengths spread over worker threads.
         // -j is honored as given; the automatic count stays single-threaded for small inputs.
         const threads = cfg.threads orelse if (subject.len < finder.parallel_min_offsets) 1 else (std.Thread.getCpuCount() catch 1);
-        const starts = try finder.candidateStartsParallel(gpa, subject, cfg.min_len, max_len, cfg.max_gap, .{ .threads = threads });
+        const starts = finder.candidateStartsParallel(gpa, subject, cfg.min_len, max_len, cfg.max_gap, .{ .threads = threads }) catch |e| {
+            try stderr.print("dna-repeats: {s}\n", .{finderErrorMessage(e)});
+            return 1;
+        };
         defer gpa.free(starts);
         if (progress) painter.paint(0, lengths);
-        var results = try finder.familiesByLength(gpa, subject, starts, cfg.min_len, max_len, cfg.max_gap, threads, if (progress) painter.hook() else null);
+        var results = finder.familiesByLength(gpa, subject, starts, cfg.min_len, max_len, cfg.max_gap, threads, if (progress) painter.hook() else null) catch |e| {
+            try stderr.print("dna-repeats: {s}\n", .{finderErrorMessage(e)});
+            return 1;
+        };
         defer results.deinit(gpa);
         if (cfg.arrays) {
             // Every length's families feed the caller, which merges nested lengths into one array.
@@ -250,4 +266,11 @@ pub fn main(init: std.process.Init) !u8 {
     try paint(stderr, color, "1", try std.fmt.bufPrint(&num, "{d}", .{total}));
     try stderr.print(" {s} in {d} ms\n", .{ if (cfg.arrays) "arrays" else "families", elapsed.toMilliseconds() });
     return 0;
+}
+
+test "finderErrorMessage: each finder error has its own message" {
+    try std.testing.expectEqualStrings("out of memory", finderErrorMessage(error.OutOfMemory));
+    try std.testing.expectEqualStrings("pattern matching failed (a PCRE2 limit was reached)", finderErrorMessage(error.MatchFailed));
+    try std.testing.expectEqualStrings("could not compile the search pattern", finderErrorMessage(error.Compile));
+    try std.testing.expectEqualStrings("could not start a worker thread", finderErrorMessage(error.SystemResources));
 }

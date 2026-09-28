@@ -12,6 +12,15 @@ const Api = ch.Api(8);
 
 pub const Error = error{ Compile, OutOfMemory, MatchFailed };
 
+/// A negative pcre2_match result as an Error: running out of heap (NOMEMORY, HEAPLIMIT) is
+/// OutOfMemory, so callers can report it as such; every other failure is MatchFailed.
+fn matchError(rc: c_int) Error {
+    return switch (rc) {
+        c.PCRE2_ERROR_NOMEMORY, c.PCRE2_ERROR_HEAPLIMIT => error.OutOfMemory,
+        else => error.MatchFailed,
+    };
+}
+
 /// One compiled fixed-length pattern plus reusable match data.
 pub const Finder = struct {
     code: *c.pcre2_code_8,
@@ -74,7 +83,7 @@ pub const Finder = struct {
         while (from + self.len <= subject.len) {
             const rc = c.pcre2_match_8(self.code, subject.ptr, subject.len, from, 0, self.md, null);
             if (rc == c.PCRE2_ERROR_NOMATCH) break;
-            if (rc < 0) return error.MatchFailed;
+            if (rc < 0) return matchError(rc);
             const start = ovector[0];
             from = start + 1;
             if (!packer.covered(subject, self.len, start)) try packer.accept(gpa, self, subject, start);
@@ -95,7 +104,7 @@ pub const Finder = struct {
             if (packer.covered(subject, self.len, start)) continue;
             const rc = c.pcre2_match_8(self.code, subject.ptr, subject.len, start, 0, self.md, null);
             if (rc == c.PCRE2_ERROR_NOMATCH) continue;
-            if (rc < 0) return error.MatchFailed;
+            if (rc < 0) return matchError(rc);
             try packer.accept(gpa, self, subject, start);
         }
         return packer.finish(gpa);
@@ -122,7 +131,9 @@ const Packer = struct {
         }
         const last = self.positions.items[self.positions.items.len - 1];
         try self.covered_until.put(gpa, subject[start..][0..f.len], last + f.len);
-        try self.out.append(gpa, .{ .len = f.len, .positions = try gpa.dupe(usize, self.positions.items) });
+        // Reserve first: a failed append after the dupe would leave the copy unowned.
+        try self.out.ensureUnusedCapacity(gpa, 1);
+        self.out.appendAssumeCapacity(.{ .len = f.len, .positions = try gpa.dupe(usize, self.positions.items) });
     }
 
     fn finish(self: *Packer, gpa: Allocator) Error![]fam.Family {
@@ -191,7 +202,7 @@ pub fn familiesByLength(
     Pool.work(&pool, progress);
     for (helpers[0..spawned]) |t| t.join();
     spawned = 0;
-    if (pool.failed.load(.acquire)) return error.MatchFailed;
+    if (pool.failed.load(.acquire)) return pool.err;
     if (progress) |p| p.step(p.ctx, total, total);
     return results;
 }
@@ -206,13 +217,15 @@ const Pool = struct {
     next: std.atomic.Value(usize) = .init(0),
     done: std.atomic.Value(usize) = .init(0),
     failed: std.atomic.Value(bool) = .init(false),
+    /// The first worker error, written only by the worker that set `failed`; read after join.
+    err: Error = error.MatchFailed,
 
     fn work(self: *Pool, progress: ?StepFn) void {
         while (!self.failed.load(.acquire)) {
             const i = self.next.fetchAdd(1, .monotonic);
             if (i >= self.slots.len) return;
-            self.slots[i] = self.one(self.lo + i) catch {
-                self.failed.store(true, .release);
+            self.slots[i] = self.one(self.lo + i) catch |e| {
+                if (self.failed.cmpxchgStrong(false, true, .acq_rel, .acquire) == null) self.err = e;
                 return;
             };
             const done = self.done.fetchAdd(1, .acq_rel) + 1;
@@ -270,7 +283,7 @@ fn regexScanStarts(gpa: Allocator, subject: []const u8, len: usize, gap: usize, 
     while (from < until and from + len <= subject.len) {
         const rc = c.pcre2_match_8(code, subject.ptr, subject.len, from, 0, md, null);
         if (rc == c.PCRE2_ERROR_NOMATCH) break;
-        if (rc < 0) return error.MatchFailed;
+        if (rc < 0) return matchError(rc);
         if (ovector[0] >= until) break;
         try out.append(gpa, ovector[0]);
         from = ovector[0] + 1;
@@ -325,7 +338,7 @@ pub fn candidateStartsParallel(gpa: Allocator, subject: []const u8, min_len: usi
 
     var total: usize = 0;
     for (parts) |p| {
-        if (p.failed) return error.MatchFailed;
+        if (p.err) |e| return e;
         total += p.starts.items.len;
     }
     const all = try gpa.alloc(usize, total);
@@ -345,11 +358,11 @@ const ScanChunk = struct {
     from: usize,
     until: usize,
     starts: std.ArrayList(usize) = .empty,
-    failed: bool = false,
+    err: ?Error = null,
 
     fn run(self: *ScanChunk) void {
-        scanStarts(self.gpa, self.subject, self.len, self.gap, self.from, self.until, &self.starts) catch {
-            self.failed = true;
+        scanStarts(self.gpa, self.subject, self.len, self.gap, self.from, self.until, &self.starts) catch |e| {
+            self.err = e;
         };
     }
 };
@@ -636,4 +649,88 @@ test "k-mer scan finds tandem runs: every start of poly-A whose copy fits" {
     defer testing.allocator.free(got);
     try testing.expectEqualSlices(usize, want, got);
     try testing.expectEqual(@as(usize, 40 - 2 * 18 + 1), got.len);
+}
+
+/// Test-only: serializes a child allocator (a FailingAllocator is not thread-safe) with a spin
+/// lock, so allocation failures can be injected into worker threads deterministically by index.
+const LockedAllocator = struct {
+    child: Allocator,
+    state: std.atomic.Value(u8) = .init(0),
+
+    fn allocator(self: *LockedAllocator) Allocator {
+        return .{ .ptr = self, .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free } };
+    }
+    fn lock(self: *LockedAllocator) void {
+        while (self.state.cmpxchgWeak(0, 1, .acquire, .monotonic) != null) std.atomic.spinLoopHint();
+    }
+    fn unlock(self: *LockedAllocator) void {
+        self.state.store(0, .release);
+    }
+    fn alloc(ctx: *anyopaque, len: usize, a: std.mem.Alignment, ra: usize) ?[*]u8 {
+        const self: *LockedAllocator = @ptrCast(@alignCast(ctx));
+        self.lock();
+        defer self.unlock();
+        return self.child.rawAlloc(len, a, ra);
+    }
+    fn resize(ctx: *anyopaque, m: []u8, a: std.mem.Alignment, n: usize, ra: usize) bool {
+        const self: *LockedAllocator = @ptrCast(@alignCast(ctx));
+        self.lock();
+        defer self.unlock();
+        return self.child.rawResize(m, a, n, ra);
+    }
+    fn remap(ctx: *anyopaque, m: []u8, a: std.mem.Alignment, n: usize, ra: usize) ?[*]u8 {
+        const self: *LockedAllocator = @ptrCast(@alignCast(ctx));
+        self.lock();
+        defer self.unlock();
+        return self.child.rawRemap(m, a, n, ra);
+    }
+    fn free(ctx: *anyopaque, m: []u8, a: std.mem.Alignment, ra: usize) void {
+        const self: *LockedAllocator = @ptrCast(@alignCast(ctx));
+        self.lock();
+        defer self.unlock();
+        self.child.rawFree(m, a, ra);
+    }
+};
+
+test "worker errors keep their cause: an allocation failure anywhere in familiesByLength is OutOfMemory" {
+    const subject = "ACGTTGCAACGTTGCAAAACGTTGCAACGTTGCATTTTACGTTGCA";
+    const starts = try candidateStarts(testing.allocator, subject, 4, 8, 3);
+    defer testing.allocator.free(starts);
+    var i: usize = 0;
+    while (true) : (i += 1) {
+        var failing = testing.FailingAllocator.init(testing.allocator, .{ .fail_index = i });
+        if (familiesByLength(failing.allocator(), subject, starts, 4, 8, 3, 1, null)) |r| {
+            var got = r;
+            got.deinit(failing.allocator());
+            if (!failing.has_induced_failure) break; // every allocation index has been failed once
+        } else |e| try testing.expectEqual(error.OutOfMemory, e);
+    }
+    try testing.expect(i > 3);
+}
+
+test "worker errors keep their cause: an allocation failure in a parallel scan chunk is OutOfMemory" {
+    const subject = "ACGTTGCAACGTTGCAAAACGTTGCAACGTTGCATTTTACGTTGCA" ** 8;
+    var i: usize = 0;
+    while (true) : (i += 1) {
+        var failing = testing.FailingAllocator.init(testing.allocator, .{ .fail_index = i });
+        var locked: LockedAllocator = .{ .child = failing.allocator() };
+        const gpa = locked.allocator();
+        if (candidateStartsParallel(gpa, subject, 4, 8, 3, .{ .threads = 4, .min_chunk = 16 })) |s| {
+            gpa.free(s);
+            if (!failing.has_induced_failure) break;
+        } else |e| try testing.expectEqual(error.OutOfMemory, e);
+    }
+    try testing.expect(i > 3);
+}
+
+test "matchError: PCRE2 out-of-memory is OutOfMemory; every other failure code is MatchFailed" {
+    const cases = [_]struct { rc: c_int, want: Error }{
+        .{ .rc = c.PCRE2_ERROR_NOMEMORY, .want = error.OutOfMemory },
+        .{ .rc = c.PCRE2_ERROR_HEAPLIMIT, .want = error.OutOfMemory },
+        .{ .rc = c.PCRE2_ERROR_MATCHLIMIT, .want = error.MatchFailed },
+        .{ .rc = c.PCRE2_ERROR_DEPTHLIMIT, .want = error.MatchFailed },
+        .{ .rc = c.PCRE2_ERROR_JIT_STACKLIMIT, .want = error.MatchFailed },
+        .{ .rc = c.PCRE2_ERROR_BADOPTION, .want = error.MatchFailed },
+    };
+    for (cases) |k| try testing.expectEqual(k.want, matchError(k.rc));
 }
