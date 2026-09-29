@@ -377,9 +377,12 @@ fn regexScanStarts(gpa: Allocator, subject: []const u8, len: usize, gap: usize, 
     }
 }
 
-/// Below this many start offsets, thread startup costs more than it saves
-/// (2900 bases: same wall time, 5x the system time with 17 threads).
-pub const parallel_min_offsets = 16 * 1024;
+/// Below this many start offsets, thread startup costs more than it saves (2900 bases: same
+/// wall time, 5x the system time with 17 threads). Also the smallest scan chunk per thread, so
+/// the default thread count (one per CPU) never splits a genome into sub-millisecond chunks:
+/// at 16K, 128 threads were 25% slower than 48 on held-out #3 (686 vs 548 ms); at 128K the
+/// default, 48 and 128 threads all take ~560 ms (2026-09-29, Threadripper 3990X).
+pub const parallel_min_offsets = 128 * 1024;
 
 pub const ScanOptions = struct {
     threads: usize,
