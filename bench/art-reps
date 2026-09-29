@@ -2,8 +2,10 @@
 -- Representative arrays for Rfam/tRNA screening: per family in an art-cluster MEMBERS.tsv
 -- (family, then the census row: record, start, end, copies, ...), the member with the most
 -- copies (the first on ties), its bases cut from GENOMES (FASTA, plain or .gz) and printed as
--- >FAMILY|REC:START-END, in family order. One genome record is held in memory at a time.
--- usage: bench/art-reps MEMBERS.tsv GENOMES.fa[.gz]
+-- >FAMILY|REC:START-END, in family order. With --all, every member is printed, the
+-- representative first and the others in input order, so labels can count members.
+-- One genome record is held in memory at a time.
+-- usage: bench/art-reps [--all] MEMBERS.tsv GENOMES.fa[.gz]
 
 local function split(line)
 	local f = {}
@@ -11,31 +13,31 @@ local function split(line)
 	return f
 end
 
-local function main(members_path, genomes_path)
-	local rep, fams = {}, {}
+local function main(all, members_path, genomes_path)
+	local rep, fams, list = {}, {}, {}
 	for line in io.lines(members_path) do
 		local f = split(line)
-		local fam, copies = tonumber(f[1]), tonumber(f[5])
-		if not rep[fam] then fams[#fams + 1] = fam end
-		if not rep[fam] or copies > rep[fam].copies then
-			rep[fam] = { rec = f[2], s = tonumber(f[3]), e = tonumber(f[4]), copies = copies }
+		local fam = tonumber(f[1])
+		local m = { rec = f[2], s = tonumber(f[3]), e = tonumber(f[4]), copies = tonumber(f[5]) }
+		if not rep[fam] then fams[#fams + 1] = fam; list[fam] = {} end
+		table.insert(list[fam], m)
+		if not rep[fam] or m.copies > rep[fam].copies then rep[fam] = m end
+	end
+	-- Printed members per family: the representative, then (with --all) the rest in order.
+	local chosen, wanted = {}, {}
+	for _, fam in ipairs(fams) do
+		chosen[fam] = { rep[fam] }
+		if all then for _, m in ipairs(list[fam]) do if m ~= rep[fam] then table.insert(chosen[fam], m) end end end
+		for _, m in ipairs(chosen[fam]) do
+			wanted[m.rec] = wanted[m.rec] or {}
+			table.insert(wanted[m.rec], m)
 		end
 	end
-	local wanted = {}
-	for _, fam in ipairs(fams) do
-		local r = rep[fam]
-		wanted[r.rec] = wanted[r.rec] or {}
-		table.insert(wanted[r.rec], fam)
-	end
-	local out = {}
 	local name, parts = nil, {}
-	local function flush()
+	local function flush() -- cut each chosen member's bases as its record ends
 		if not (name and wanted[name]) then return end
 		local seq = table.concat(parts):upper()
-		for _, fam in ipairs(wanted[name]) do
-			local r = rep[fam]
-			out[fam] = string.format(">%d|%s:%d-%d\n%s", fam, name, r.s, r.e, seq:sub(r.s, r.e))
-		end
+		for _, m in ipairs(wanted[name]) do m.seq = seq:sub(m.s, m.e) end
 	end
 	local input = genomes_path:match("%.gz$") and assert(io.popen("gzip -dc '" .. genomes_path:gsub("'", "'\\''") .. "'"))
 		or assert(io.open(genomes_path))
@@ -51,8 +53,13 @@ local function main(members_path, genomes_path)
 	input:close()
 	table.sort(fams)
 	for _, fam in ipairs(fams) do
-		print((assert(out[fam], "record not in genomes: " .. rep[fam].rec)))
+		for _, m in ipairs(chosen[fam]) do
+			print(string.format(">%d|%s:%d-%d\n%s", fam, m.rec, m.s, m.e, assert(m.seq, "record not in genomes: " .. m.rec)))
+		end
 	end
 end
 
-main(assert(arg[1], "usage: art-reps MEMBERS.tsv GENOMES.fa[.gz]"), assert(arg[2], "usage: art-reps MEMBERS.tsv GENOMES.fa[.gz]"))
+local usage = "usage: art-reps [--all] MEMBERS.tsv GENOMES.fa[.gz]"
+local all = arg[1] == "--all"
+local i = all and 2 or 1
+main(all, assert(arg[i], usage), assert(arg[i + 1], usage))

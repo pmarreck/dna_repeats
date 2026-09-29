@@ -211,27 +211,32 @@ check art-reps "$(luajit bench/art-reps "$rp/members.tsv" "$rp/g.fa")" \
 	"$(printf '>1|g1:1-4\nACGT\n>2|g2:6-10\nAAAAA')"
 check art-reps-gzip "$(luajit bench/art-reps "$rp/members.tsv" "$rp/g.fa.gz")" \
 	"$(printf '>1|g1:1-4\nACGT\n>2|g2:6-10\nAAAAA')"
+# --all: every member, the representative first, then the others in input order.
+check art-reps-all "$(luajit bench/art-reps --all "$rp/members.tsv" "$rp/g.fa")" \
+	"$(printf '>1|g1:1-4\nACGT\n>1|g1:3-12\nGTACGTACGG\n>1|g2:2-4\nCCC\n>2|g2:6-10\nAAAAA')"
 
-# art-annotate: each family row plus its representative locus, best included Rfam hit
-# (lowest E-value, "!" only) and ARAGORN tRNA/tmRNA count.
+# art-annotate: labels count members, not the representative alone (a family's representative
+# can be the one member that is a CRISPR array). Each family row plus: representative locus
+# (its first record in REPS.fa), members scanned, the Rfam name most members hit ("!" hits;
+# ties by name), members with an included Rfam hit, members with an ARAGORN tRNA/tmRNA,
+# and with CRISPR.tsv, members with a dna-repeats --crispr array.
 an="$pdir/an"
 mkdir -p "$an"
 printf '1\t9\t8\t0\t-\t0.00\tAC\n2\t5\t4\t1\t-\t0.10\tAA\n3\t2\t2\t0\t-\t0.00\tGG\n' >"$an/fam.tsv"
-printf '>1|g1:1-4\nACGT\n>2|g2:6-10\nAAAAA\n>3|g3:1-9\nGGGGGGGGG\n' >"$an/reps.fa"
+printf '>1|g1:1-4\nACGT\n>1|g5:1-4\nACGA\n>2|g2:6-10\nAAAAA\n>3|g3:1-9\nGGGGGGGGG\n' >"$an/reps.fa"
 cat >"$an/cm.tbl" <<'TBL'
 #idx target name accession query name ...
 1    tRNA                 RF00005   1|g1:1-4             -         CL00001    cm        1       71       11       83      +    no    1 0.63   0.0   65.6   7.6e-15  !   *       -      -      -      -      -      -      71      99 tRNA
-2    5S_rRNA              RF00001   1|g1:1-4             -         -          cm        1       71       11       83      +    no    1 0.63   0.0   65.6   1.0e-20  ?   *       -      -      -      -      -      -      71      99 5S
+2    5S_rRNA              RF00001   1|g5:1-4             -         -          cm        1       71       11       83      +    no    1 0.63   0.0   65.6   1.0e-20  ?   *       -      -      -      -      -      -      71      99 5S
 3    tmRNA                RF00023   2|g2:6-10            -         -          cm        1       71       11       83      +    no    1 0.63   0.0   30.0   2e-05    !   *       -      -      -      -      -      -      71      99 tmRNA
 4    Intron_gpII          RF00029   2|g2:6-10            -         -          cm        1       71       11       83      +    no    1 0.63   0.0   40.0   3e-08    !   *       -      -      -      -      -      -      71      99 group II
 TBL
-printf '>1|g1:1-4\n2 genes found\n1 tRNA-Ala [11,86]\n2 tRNA-Gly [100,170]\n>2|g2:6-10\n0 genes found\n>3|g3:1-9\n1 gene found\n1 tmRNA [1,300]\n>end \t3 sequences\n' >"$an/ara.txt"
-# The optional CRISPR.tsv (dna-repeats --crispr on the representatives) adds a CRISPR array count.
+printf '>1|g1:1-4\n2 genes found\n1 tRNA-Ala [11,86]\n2 tRNA-Gly [100,170]\n>1|g5:1-4\n0 genes found\n>2|g2:6-10\n0 genes found\n>3|g3:1-9\n1 gene found\n1 tmRNA [1,300]\n>end \t4 sequences\n' >"$an/ara.txt"
 printf '3|g3:1-9\t1\t9\t4\t36\tACCG\t1,2,3,4\n3|g3:1-9\t20\t90\t4\t36\tACCG\t1,2,3,4\n1|g1:1-4\t1\t4\t3\t30\tAC\t1,2,3\n' >"$an/crispr.tsv"
 check art-annotate "$(luajit bench/art-annotate "$an/fam.tsv" "$an/reps.fa" "$an/cm.tbl" "$an/ara.txt")" \
-	"$(printf '1\t9\t8\t0\t-\t0.00\tAC\tg1:1-4\ttRNA\t7.6e-15\t2\n2\t5\t4\t1\t-\t0.10\tAA\tg2:6-10\tIntron_gpII\t3e-08\t0\n3\t2\t2\t0\t-\t0.00\tGG\tg3:1-9\t-\t-\t1')"
+	"$(printf '1\t9\t8\t0\t-\t0.00\tAC\tg1:1-4\t2\ttRNA\t1\t1\n2\t5\t4\t1\t-\t0.10\tAA\tg2:6-10\t1\tIntron_gpII\t1\t0\n3\t2\t2\t0\t-\t0.00\tGG\tg3:1-9\t1\t-\t0\t1')"
 check art-annotate-crispr "$(luajit bench/art-annotate "$an/fam.tsv" "$an/reps.fa" "$an/cm.tbl" "$an/ara.txt" "$an/crispr.tsv")" \
-	"$(printf '1\t9\t8\t0\t-\t0.00\tAC\tg1:1-4\ttRNA\t7.6e-15\t2\t1\n2\t5\t4\t1\t-\t0.10\tAA\tg2:6-10\tIntron_gpII\t3e-08\t0\t0\n3\t2\t2\t0\t-\t0.00\tGG\tg3:1-9\t-\t-\t1\t2')"
+	"$(printf '1\t9\t8\t0\t-\t0.00\tAC\tg1:1-4\t2\ttRNA\t1\t1\t1\n2\t5\t4\t1\t-\t0.10\tAA\tg2:6-10\t1\tIntron_gpII\t1\t0\t0\n3\t2\t2\t0\t-\t0.00\tGG\tg3:1-9\t1\t-\t0\t1\t1')"
 
 # bench/art-census on a genome with arrays but no reverse transcriptase (a shuffled control
 # can have none): fake tools on PATH, pinned models overridden by PFAM_RVT1_HMM and MYRT_HMM.

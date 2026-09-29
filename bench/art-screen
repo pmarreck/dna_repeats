@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Known-RNA screen of art-cluster families (intents/art_search.md): each family's
-# representative array (bench/art-reps) against Rfam 15.0 (Infernal cmscan, gathering
+# Known-RNA screen of art-cluster families (intents/art_search.md): every member array
+# (bench/art-reps --all) against Rfam 15.0 (Infernal cmscan, gathering
 # thresholds, clan competition), ARAGORN tRNA/tmRNA calls and dna-repeats --crispr arrays;
 # bench/art-annotate joins them. Writes OUTDIR/{reps.fa,rfam.tbl,aragorn.txt,crispr.tsv,
-# screened.tsv} and prints how many families match a known RNA or CRISPR.
+# screened.tsv} and prints how many families match a known RNA or CRISPR in at least half of
+# their members (a representative alone can mislabel a family).
 # env DNAREPEATS_BIN uses that binary instead of building it. usage: bench/art-screen FAMILIES.tsv MEMBERS.tsv GENOMES.fa[.gz] OUTDIR [-j THREADS]
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -16,10 +17,12 @@ rfam=$(nix build .#rfam --no-link --print-out-paths) || exit 1
 bin=${DNAREPEATS_BIN:-}
 [ -n "$bin" ] || { p=$(nix build .#default --no-link --print-out-paths) || exit 1; bin=$p/bin/dna-repeats; }
 mkdir -p "$out" || exit 1
-luajit bench/art-reps "$members" "$genomes" >"$out/reps.fa" || exit 1
+luajit bench/art-reps --all "$members" "$genomes" >"$out/reps.fa" || exit 1
 cmscan --rfam --cut_ga --nohmmonly --fmt 2 --clanin "$rfam/Rfam.clanin" --oskip --cpu "$threads" \
 	--tblout "$out/rfam.tbl" "$rfam/Rfam.cm" "$out/reps.fa" >/dev/null || { echo "art-screen: cmscan failed" >&2; exit 1; }
 aragorn -t -m -w "$out/reps.fa" >"$out/aragorn.txt" || { echo "art-screen: aragorn failed" >&2; exit 1; }
 "$bin" --no-progress --crispr -j "$threads" "$out/reps.fa" >"$out/crispr.tsv" 2>/dev/null || { echo "art-screen: dna-repeats --crispr failed" >&2; exit 1; }
 luajit bench/art-annotate "$fams" "$out/reps.fa" "$out/rfam.tbl" "$out/aragorn.txt" "$out/crispr.tsv" >"$out/screened.tsv" || exit 1
-awk -F'\t' '{n++; if ($9 != "-" || $11 > 0) k++; else if ($12 > 0) c++} END {printf "families: %d; known RNA (Rfam or tRNA/tmRNA): %d; CRISPR: %d; unexplained: %d\n", n, k, c, n - k - c}' "$out/screened.tsv"
+# Columns after the 7 family columns: locus, members scanned, top Rfam, members with Rfam,
+# with tRNA/tmRNA, with CRISPR.
+awk -F'\t' '{n++; if (2 * $11 >= $9 || 2 * $12 >= $9) k++; else if (2 * $13 >= $9) c++} END {printf "families: %d; known RNA in >= half of members (Rfam or tRNA/tmRNA): %d; CRISPR in >= half: %d; unexplained: %d\n", n, k, c, n - k - c}' "$out/screened.tsv"
