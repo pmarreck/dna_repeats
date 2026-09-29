@@ -146,3 +146,10 @@ for upstream of RTs.
   repeats of unknown novelty, not claimed as new.
 - ECF-sigma lead (families 3 and 4): a literature search found nothing pairing ECF sigma factors
   with non-coding repeat arrays in phages; still open.
+- ECF-sigma lead (ART 5f; scratch analysis on the MGV census): families 3 and 4 occur only in
+  crAss-like phages (283 and 258 genomes, disjoint). In 265 of 283 family-3 members the array
+  lies 500-2,000 bp upstream of an ECF sigma factor gene (5' of its start codon); in 247 of 258
+  family-4 members, >= 2 kb upstream. Family 3 has CRISPR geometry (36-nt repeat, 29-30-nt
+  spacers) and no Cas gene nearby: a phage-encoded Cas-less CRISPR array, a known class (such
+  arrays are compact and some target competing phages; PMC7757702). The fixed position before
+  an ECF sigma gene in two crAss lineages is not described in the two sources checked; open.
