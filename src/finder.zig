@@ -200,7 +200,10 @@ pub fn familiesByLength(
     var results: LengthResults = .{ .min_len = lo, .per_length = slots };
     errdefer results.deinit(gpa);
 
-    var pool: Pool = .{ .gpa = gpa, .subject = subject, .starts = starts, .lo = lo, .max_gap = max_gap, .slots = slots };
+    // Each length probes only its own exact candidates (one scan per start for all lengths).
+    var per_length = try lengthCandidates(gpa, subject, starts, lo, max_len, max_gap);
+    defer per_length.deinit(gpa);
+    var pool: Pool = .{ .gpa = gpa, .subject = subject, .starts = per_length, .lo = lo, .max_gap = max_gap, .slots = slots };
     const helpers = try gpa.alloc(std.Thread, @min(threads, total) -| 1);
     defer gpa.free(helpers);
     var spawned: usize = 0;
@@ -220,7 +223,7 @@ pub fn familiesByLength(
 const Pool = struct {
     gpa: Allocator,
     subject: []const u8,
-    starts: []const usize,
+    starts: LengthStarts,
     lo: usize,
     max_gap: usize,
     slots: [][]fam.Family,
@@ -246,9 +249,83 @@ const Pool = struct {
     fn one(self: *Pool, len: usize) Error![]fam.Family {
         const f = try Finder.initAnchored(len, self.max_gap);
         defer f.deinit();
-        return f.familiesAt(self.gpa, self.subject, self.starts);
+        return f.familiesAt(self.gpa, self.subject, self.starts.forLength(len));
     }
 };
+
+/// Candidate starts per length, from one pass per start instead of one regex probe per
+/// start per length (the cost that dominates wide length ranges such as --art 12..49).
+pub const LengthStarts = struct {
+    min_len: usize,
+    lists: [][]usize,
+
+    pub fn forLength(self: LengthStarts, len: usize) []usize {
+        return self.lists[len - self.min_len];
+    }
+
+    pub fn deinit(self: *LengthStarts, gpa: Allocator) void {
+        for (self.lists) |l| gpa.free(l);
+        gpa.free(self.lists);
+    }
+};
+
+/// For each length L in [lo, max_len], the starts (ascending, from `starts`) whose L-mer is
+/// all A/C/G/T and has an exact copy at q with p + L <= q <= p + L + max_gap: exactly the
+/// starts where the anchored chain pattern of length L can match. Technique: for each start,
+/// one scan of q over its window computes the common prefix of p and q (capped by q - p, the
+/// A/C/G/T run at p and max_len); a common prefix of c at distance d = q - p admits every L
+/// with max(lo, d - max_gap) <= L <= c.
+/// complexity: O(|starts| * (max_len + max_gap)) byte compares, mostly failing on the first.
+pub fn lengthCandidates(gpa: Allocator, subject: []const u8, starts: []const usize, lo: usize, max_len: usize, max_gap: usize) Allocator.Error!LengthStarts {
+    const n_len = if (max_len >= lo) max_len - lo + 1 else 0;
+    var building = try gpa.alloc(std.ArrayList(usize), n_len);
+    defer gpa.free(building);
+    for (building) |*l| l.* = .empty;
+    errdefer for (building) |*l| l.deinit(gpa);
+    var have = try gpa.alloc(bool, n_len);
+    defer gpa.free(have);
+    for (starts) |p| {
+        if (n_len == 0 or p + lo > subject.len) continue;
+        var run: usize = 0; // A/C/G/T bases from p, up to max_len
+        while (run < max_len and p + run < subject.len) : (run += 1) {
+            switch (subject[p + run]) {
+                'A', 'C', 'G', 'T' => {},
+                else => break,
+            }
+        }
+        if (run < lo) continue;
+        @memset(have, false);
+        var missing = run - lo + 1; // lengths lo..run not yet admitted
+        var q = p + lo;
+        const q_end = @min(subject.len - lo, p + max_len + max_gap);
+        while (q <= q_end and missing > 0) : (q += 1) {
+            if (subject[q] != subject[p]) continue;
+            const d = q - p;
+            const cap = @min(@min(run, d), subject.len - q);
+            var common: usize = 1;
+            while (common < cap and subject[p + common] == subject[q + common]) common += 1;
+            var len = @max(lo, d -| max_gap);
+            while (len <= common) : (len += 1) {
+                if (!have[len - lo]) {
+                    have[len - lo] = true;
+                    missing -= 1;
+                }
+            }
+        }
+        for (have, 0..) |h, k| if (h) try building[k].append(gpa, p);
+    }
+    const lists = try gpa.alloc([]usize, n_len);
+    var done: usize = 0;
+    errdefer {
+        for (lists[0..done]) |l| gpa.free(l);
+        gpa.free(lists);
+    }
+    for (building, 0..) |*l, k| {
+        lists[k] = try l.toOwnedSlice(gpa);
+        done += 1;
+    }
+    return .{ .min_len = lo, .lists = lists };
+}
 
 /// Offsets that can start a chain of any length in [min_len, max_len] under max_gap.
 /// A length-L chain at s has a copy within max_gap of s+L, so the length-min_len
@@ -765,4 +842,53 @@ test "jitStatus: JIT out of memory is OutOfMemory; success and every other code 
 
 test {
     _ = kmer_scan; // run the k-mer scan's own tests with the finder's
+}
+
+/// Test reference for lengthCandidates: the definition, checked per length and start.
+fn bruteLengthCandidates(gpa: Allocator, subject: []const u8, starts: []const usize, lo: usize, max_len: usize, max_gap: usize, len: usize) ![]usize {
+    _ = lo;
+    _ = max_len;
+    var out: std.ArrayList(usize) = .empty;
+    errdefer out.deinit(gpa);
+    for (starts) |p| {
+        if (p + len > subject.len) continue;
+        const unit = subject[p..][0..len];
+        if (std.mem.indexOfNone(u8, unit, "ACGT") != null) continue;
+        var q = p + len;
+        while (q <= p + len + max_gap and q + len <= subject.len) : (q += 1) {
+            if (std.mem.eql(u8, unit, subject[q..][0..len])) {
+                try out.append(gpa, p);
+                break;
+            }
+        }
+    }
+    return out.toOwnedSlice(gpa);
+}
+
+test "lengthCandidates: per length, exactly the starts whose unit has a copy within the gap" {
+    const gpa = testing.allocator;
+    var buf: [3000]u8 = undefined;
+    var s: u64 = 99;
+    for (&buf) |*b| {
+        s = s * 16807 % 2147483647;
+        b.* = "AAAACCGTN"[s % 9];
+    }
+    for ([_][3]usize{ .{ 3, 9, 0 }, .{ 4, 12, 7 }, .{ 5, 20, 40 }, .{ 12, 16, 120 } }) |cfg| {
+        const lo = cfg[0];
+        const max_len = cfg[1];
+        const max_gap = cfg[2];
+        const starts = try candidateStarts(gpa, &buf, lo, max_len, max_gap);
+        defer gpa.free(starts);
+        var got = try lengthCandidates(gpa, &buf, starts, lo, max_len, max_gap);
+        defer got.deinit(gpa);
+        var len = lo;
+        while (len <= max_len) : (len += 1) {
+            const want = try bruteLengthCandidates(gpa, &buf, starts, lo, max_len, max_gap, len);
+            defer gpa.free(want);
+            testing.expectEqualSlices(usize, want, got.forLength(len)) catch |e| {
+                std.debug.print("lo {d} max_len {d} gap {d}: length {d}\n", .{ lo, max_len, max_gap, len });
+                return e;
+            };
+        }
+    }
 }
