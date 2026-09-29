@@ -47,8 +47,8 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <line class="grid" x1="517.0" x2="517.0" y1="90" y2="180"/>
 <text class="n" x="517.0" y="193" text-anchor="middle">100%</text>
 <text x="315" y="109.0" style="font-size:12px">dna-repeats</text>
-<path d="M401.0,97.0 h107.3 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-107.3 z" fill="var(--s1)"/>
-<text class="v b" x="518.3" y="110.0">95.9%</text>
+<path d="M401.0,97.0 h110.4 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-110.4 z" fill="var(--s1)"/>
+<text class="v b" x="521.4" y="110.0">98.6%</text>
 <text x="315" y="139.0" style="font-size:12px">MinCED</text>
 <path d="M401.0,127.0 h105.5 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-105.5 z" fill="var(--s2)"/>
 <text class="v" x="516.5" y="140.0">94.4%</text>
@@ -68,8 +68,8 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <line class="grid" x1="812.0" x2="812.0" y1="90" y2="180"/>
 <text class="n" x="812.0" y="193" text-anchor="middle">100%</text>
 <text x="610" y="109.0" style="font-size:12px">dna-repeats</text>
-<path d="M696.0,97.0 h92.7 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-92.7 z" fill="var(--s1)"/>
-<text class="v b" x="798.7" y="110.0">83.3%</text>
+<path d="M696.0,97.0 h94.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-94.0 z" fill="var(--s1)"/>
+<text class="v b" x="800.0" y="110.0">84.5%</text>
 <text x="610" y="139.0" style="font-size:12px">MinCED</text>
 <path d="M696.0,127.0 h84.3 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-84.3 z" fill="var(--s2)"/>
 <text class="v" x="790.3" y="140.0">76.1%</text>
@@ -89,14 +89,14 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <line class="grid" x1="222.0" x2="222.0" y1="235" y2="325"/>
 <text class="n" x="222.0" y="338" text-anchor="middle">25</text>
 <text x="20" y="254.0" style="font-size:12px">dna-repeats</text>
-<path d="M106.0,242.0 h15.3 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-15.3 z" fill="var(--s1)"/>
-<text class="v b" x="131.3" y="255.0">4.15 s</text>
+<path d="M106.0,242.0 h13.5 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-13.5 z" fill="var(--s1)"/>
+<text class="v b" x="129.5" y="255.0">3.78 s</text>
 <text x="20" y="284.0" style="font-size:12px">MinCED</text>
-<path d="M106.0,272.0 h65.9 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-65.9 z" fill="var(--s2)"/>
-<text class="v" x="181.9" y="285.0">15.07 s</text>
+<path d="M106.0,272.0 h68.2 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-68.2 z" fill="var(--s2)"/>
+<text class="v" x="184.2" y="285.0">15.56 s</text>
 <text x="20" y="314.0" style="font-size:12px">PILER-CR</text>
-<path d="M106.0,302.0 h110.2 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-110.2 z" fill="var(--s3)"/>
-<text class="v" x="226.2" y="315.0">24.61 s</text>
+<path d="M106.0,302.0 h110.0 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-110.0 z" fill="var(--s3)"/>
+<text class="v" x="226.0" y="315.0">24.57 s</text>
 <text class="t" x="315" y="207" style="font-size:13px">Peak memory</text>
 <text class="n" x="315" y="223">MB, largest genome (lower is better)</text>
 <line class="base" x1="401.0" x2="401.0" y1="235" y2="325"/>
@@ -111,13 +111,13 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <text class="n" x="517.0" y="338" text-anchor="middle">500</text>
 <text x="315" y="254.0" style="font-size:12px">dna-repeats</text>
 <path d="M401.0,242.0 h0.0 a3,3 0 0 1 3,3 v11.5 a3,3 0 0 1 -3,3 h-0.0 z" fill="var(--s1)"/>
-<text class="v b" x="410.3" y="255.0">14.0 MB</text>
+<text class="v b" x="410.2" y="255.0">14.0 MB</text>
 <text x="315" y="284.0" style="font-size:12px">MinCED</text>
-<path d="M401.0,272.0 h109.3 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-109.3 z" fill="var(--s2)"/>
-<text class="v" x="520.3" y="285.0">488.2 MB</text>
+<path d="M401.0,272.0 h102.8 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-102.8 z" fill="var(--s2)"/>
+<text class="v" x="513.8" y="285.0">460.2 MB</text>
 <text x="315" y="314.0" style="font-size:12px">PILER-CR</text>
-<path d="M401.0,302.0 h1.6 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-1.6 z" fill="var(--s3)"/>
-<text class="v" x="412.6" y="315.0">24.3 MB</text>
+<path d="M401.0,302.0 h1.8 a4,4 0 0 1 4,4 v10.0 a4,4 0 0 1 -4,4 h-1.8 z" fill="var(--s3)"/>
+<text class="v" x="412.8" y="315.0">24.9 MB</text>
 <rect x="610" y="222" width="12" height="12" rx="3" fill="var(--s1)"/><text x="630" y="233" style="font-size:13px">dna-repeats (one thread)</text>
 <rect x="610" y="244" width="12" height="12" rx="3" fill="var(--s2)"/><text x="630" y="255" style="font-size:13px">MinCED</text>
 <rect x="610" y="266" width="12" height="12" rx="3" fill="var(--s3)"/><text x="630" y="277" style="font-size:13px">PILER-CR</text>

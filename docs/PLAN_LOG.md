@@ -67,3 +67,4 @@ Append-only record of completed PLAN.md items.
 ## Retired 2026-09-29
 
 - [x] [Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named. (done 2026-09-28 17:22 EDT)
+- [x] [Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)] CR10: split the "identical spacers are not an array" test so each of its three filters has its own failing case; add inclusive-edge spacer bound tests (min_spacer, max_spacer). (done 2026-09-28 18:40 EDT, f348b1b; found and fixed the min_spacer contract bug)
