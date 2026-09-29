@@ -10,7 +10,6 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] ART (Peter, 2026-09-28): run on the relevant genomes and try to exceed the Anthropic ART preprint. Feasibility: MarsHill (MW248466.1) array found upstream of the RT (5 copies, 14-nt core -> 35-nt consensus) but CRISPR filters reject it (conservation 0.897, spacer 10-mer sharing 0.33); scope questions pending with Peter.
 	- [ ] ART 3: pin INPHARED (all GenBank phage genomes) and scan it; time and memory for the whole collection.
 	- [ ] ART 5b: census runs: MGV done; INPHARED done (done 2026-09-28 12:00 EDT); shuffled MGV control done (0f17fa9); GPD done (no ART-like array); IMG/VR v4.1 when Peter has JGI access.
-	- [x] ART 5e: UG27 preprint compared (family 35 = its conserved ncRNA motif; 65 and 15 not in its constructs); ECF-sigma lead still open. (done 2026-09-28 16:35 EDT)
 	- [ ] ART 5f: ECF-sigma lead (families 3, 4): orientation and distance of the sigma gene to the array, host range, whether the repeats carry ECF promoter motifs (-35 AAC, -10 CGT).
 	- [ ] Long-period repeat census (Peter, 2026-09-28): units of 50..500 nt, copies up to several kb apart, across the same phage collections; cluster families and screen out known element classes (coding repeats, rRNA, insertion sequences) before calling anything novel. After the ART census.
 	- [ ] ART 6: findings report and README section.
@@ -23,6 +22,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Review (tests): finder exhaustive tests ~2 min (munmap churn from the testing allocator): per-subject arena, run families.zig tests once as a module, drop Finder.families-only tests covered by the pruned differential; byte classifier tests should check each byte's class, not bucket totals; CLI stderr assertions and missing cases (-j, JSON across records, empty/N-only records, min-len > max-len).
 - [ ] Step 4: reverse-complement strand.
 - [ ] Step 5: bounded-mismatch copies with an independent oracle; then rerun the scoreboard. Treat N and partial IUPAC codes (R, Y, ...) as free mismatches there; exact mode keeps N never-matching (Peter asked, 2026-09-26).
+- [ ] Step 5 idea (Peter, 2026-09-28): packed 2-bit sub-words as exact pigeonhole seeds for mismatch copies (m mismatches in a k-mer leave an exact piece of k/(m+1) bases); a lone 4-base byte filter would pass ~30% of random windows, too weak alone.
 - [ ] Pure-Zig family finder: measure against the capture-history regex now that the prefilter is Zig (regex families are 28% of one-thread time on E. coli).
 - [ ] Exploratory, measure + TDD: 2-bit base packing (32 bases per u64) for unit equality and popcount Hamming in seed extension.
 - [ ] Exploratory, measure + TDD: SIMD (@Vector) window search for unit copies in extension and scan; compare against scalar and PCRE2 JIT.
@@ -34,7 +34,6 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Repin the fork when capture-history changes; the deps hash in flake.nix must be regenerated with it.
 
 ## Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)
-- [x] CR1: README headline "fewer false ones" holds only under any-evidence-level precision; under level-4 truth dna-repeats has 5 false vs MinCED 4. Rescore independently, reword the claim, say which truth set each column uses, note time is a 30-genome sum and memory is the largest genome. (done 2026-09-28 16:37 EDT)
 - [x] CR2: bench/score.awk precision sums overlaps across truth rows; take the union (failing test first: two truth rows covering the same bases). (done 2026-09-28 16:37 EDT)
 - [x] CR3: README verify sample is stale (23 of 23, 4.11 s, 13 MB); paste a real 31-check run. bench/verify ART tally greps the expected column too; count rows where result equals expectation. (done 2026-09-28 16:37 EDT)
 - [x] CR4: --art help and comment: bounds are spacer 60..450 (start to start 60+L..450+L), copies need 23 of 26 (0.15), seeds shorter than min_unit need 4 copies, positional spacer filter stays on. (done 2026-09-28 16:37 EDT)
