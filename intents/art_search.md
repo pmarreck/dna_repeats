@@ -153,3 +153,11 @@ for upstream of RTs.
   spacers) and no Cas gene nearby: a phage-encoded Cas-less CRISPR array, a known class (such
   arrays are compact and some target competing phages; PMC7757702). The fixed position before
   an ECF sigma gene in two crAss lineages is not described in the two sources checked; open.
+- Correction (ART 5g, 2026-09-29): family 3 is not a CRISPR family. Its representative (the member
+  with the most copies, 5) holds a real CRISPR array, which is where the "CRISPR" label and the
+  36-nt/29-nt geometry came from; the other 282 members are 3 copies of the 37-nt repeat, and
+  neither dna-repeats --crispr nor MinCED calls an array in any of them (1 of 283 regions each).
+  bench/art-screen labels a family by its representative alone, so every label above means "the
+  representative matches", not "the family does". Family 3 is therefore a conserved 3-copy
+  repeat carrying an inverted repeat (AAGTATC ... GATACTT), 500-2,000 bp upstream of an ECF sigma
+  gene in 265 crAss-like phage genomes: an open lead, together with family 4.

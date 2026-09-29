@@ -11,7 +11,8 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 	- [ ] ART 3: pin INPHARED (all GenBank phage genomes) and scan it; time and memory for the whole collection.
 	- [ ] ART 5b: census runs: MGV done; INPHARED done (done 2026-09-28 12:00 EDT); shuffled MGV control done (0f17fa9); GPD done (no ART-like array); IMG/VR v4.1 when Peter has JGI access.
 	- [x] ART 5f: ECF-sigma lead (families 3, 4): orientation and distance of the sigma gene to the array, host range, whether the repeats carry ECF promoter motifs (-35 AAC, -10 CGT). (done 2026-09-29 00:00 EDT: array sits upstream of the sigma gene in 265/283 and 247/258; crAss-like phages only)
-	- [ ] ART 5g: do family 3 spacers (crAss orphan CRISPR arrays) match other MGV genomes (exact 25-mers, both strands), i.e. do they target competing phages?
+	- [x] ART 5g: do family 3 spacers (crAss orphan CRISPR arrays) match other MGV genomes (exact 25-mers, both strands), i.e. do they target competing phages? (moot 2026-09-29 00:10 EDT: only 1 of 283 family-3 regions holds a CRISPR array; the label came from the representative alone)
+	- [ ] ART 5h: art-screen labels per member, not per representative (fraction of members matching Rfam, tRNA, CRISPR), test first; rerun the MGV screen and fix the counts in intents/art_search.md.
 	- [ ] Long-period repeat census (Peter, 2026-09-28): units of 50..500 nt, copies up to several kb apart, across the same phage collections; cluster families and screen out known element classes (coding repeats, rRNA, insertion sequences) before calling anything novel. After the ART census.
 	- [ ] ART 6: findings report and README section.
 - [ ] Auto thread count: default (all 128) is 15% slower than -j 48 on held-out #3 (589 vs 511 ms; knee near 32). Measure per phase (scan chunks vs per-length pool, which cannot use more threads than lengths) and cap accordingly.
@@ -36,7 +37,6 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 
 ## Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)
 - [x] CR1b: update the published findings report artifact like the README (both precision readings; it still says fewer false ones). (done 2026-09-28 23:45 EDT, artifact version 2)
-- [x] CR5: one definition of "6 kb upstream" for art-check and art-link (gap from array edge to RT start codon 1..6000, strand-aware); recheck the 8 loci and the census counts. (done 2026-09-28 16:45 EDT; 8 loci unchanged)
 - [x] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N. (done 2026-09-28 16:52 EDT)
 - [x] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named. (done 2026-09-28 17:22 EDT)
 - [x] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share. (done 2026-09-28 23:40 EDT: O(n) hash window built and measured, slower at the CRISPR gap; kept the vectorized scan, documented why, kept its new reference test)
