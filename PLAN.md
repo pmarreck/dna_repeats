@@ -37,13 +37,13 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 
 ## Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)
 - [x] CR1b: update the published findings report artifact like the README (both precision readings; it still says fewer false ones). (done 2026-09-28 23:45 EDT, artifact version 2)
-- [x] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N. (done 2026-09-28 16:52 EDT)
 - [x] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named. (done 2026-09-28 17:22 EDT)
 - [x] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share. (done 2026-09-28 23:40 EDT: O(n) hash window built and measured, slower at the CRISPR gap; kept the vectorized scan, documented why, kept its new reference test)
 - [x] CR9: (explore no longer installed, 9db1715) make the differential test exercise the production Finder pattern (CAPTURE_HISTORY, DOTALL gap, JIT) or say what it pins. (done 2026-09-28 19:05 EDT)
 - [x] CR10: split the "identical spacers are not an array" test so each of its three filters has its own failing case; add inclusive-edge spacer bound tests (min_spacer, max_spacer). (done 2026-09-28 18:40 EDT, f348b1b; found and fixed the min_spacer contract bug)
 - [ ] CR10b: on a quiet machine, log held-out #3 scoreboard rows for the f348b1b caller and regenerate docs/img charts; rerun the ART censuses (MGV, INPHARED, GPD) with it and update intents/art_search.md counts.
-- [ ] CR8b: profile --art on one thread (1.2 s on E. coli vs 0.14 s for --crispr) to find where its time goes before optimizing anything.
+- [x] CR8b: profile --art on one thread (1.2 s on E. coli vs 0.14 s for --crispr) to find where its time goes before optimizing anything. (done 2026-09-29 00:00 EDT: E. coli one thread user 1.19 s; --max-len 12 0.29 s, 24 0.58 s: the per-length family step dominates, not the prefilter)
+- [ ] CR8c: per-length candidate narrowing for wide length ranges (--art 12..49): a start with no L-mer copy in range has no (L+1)-mer copy, so each length probes only the previous length's hits; differential-test against the current path, then measure.
 - [x] CR12: divergence opponent rows (e69d2e8) predate plant-arrays and lack input_sha256; rerun MinCED and PILER-CR on the pinned generator and add them to bench/verify. (done 2026-09-28 23:50 EDT: MinCED and PILER-CR rows reproduced from the pinned generator; verify now 47 checks)
 - [x] CR13: advisories (OOM leaks fixed in 9db1715): negative named-group lookup cast (finder.zig:51); JIT NOMEMORY ignored (finder.zig:45); normalize FASTA byte classifier per byte, not bucket totals. (done 2026-09-28 18:53 EDT)
 - [ ] CR14 (backlog): u32 positions with a >4 GiB record guard; keep only needed family headers in callArrays (main.zig:207).
