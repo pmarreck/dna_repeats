@@ -34,18 +34,18 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Repin the fork when capture-history changes; the deps hash in flake.nix must be regenerated with it.
 
 ## Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)
-- [x] CR2: bench/score.awk precision sums overlaps across truth rows; take the union (failing test first: two truth rows covering the same bases). (done 2026-09-28 16:37 EDT)
 - [x] CR3: README verify sample is stale (23 of 23, 4.11 s, 13 MB); paste a real 31-check run. bench/verify ART tally greps the expected column too; count rows where result equals expectation. (done 2026-09-28 16:37 EDT)
 - [x] CR4: --art help and comment: bounds are spacer 60..450 (start to start 60+L..450+L), copies need 23 of 26 (0.15), seeds shorter than min_unit need 4 copies, positional spacer filter stays on. (done 2026-09-28 16:37 EDT)
 - [ ] CR1b: update the published findings report artifact like the README (both precision readings; it still says fewer false ones).
 - [x] CR5: one definition of "6 kb upstream" for art-check and art-link (gap from array edge to RT start codon 1..6000, strand-aware); recheck the 8 loci and the census counts. (done 2026-09-28 16:45 EDT; 8 loci unchanged)
 - [x] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N. (done 2026-09-28 16:52 EDT)
 - [x] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named. (done 2026-09-28 17:22 EDT)
-- [ ] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share.
+- [x] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share. (done 2026-09-28 23:40 EDT: O(n) hash window built and measured, slower at the CRISPR gap; kept the vectorized scan, documented why, kept its new reference test)
 - [x] CR9: (explore no longer installed, 9db1715) make the differential test exercise the production Finder pattern (CAPTURE_HISTORY, DOTALL gap, JIT) or say what it pins. (done 2026-09-28 19:05 EDT)
 - [x] CR10: split the "identical spacers are not an array" test so each of its three filters has its own failing case; add inclusive-edge spacer bound tests (min_spacer, max_spacer). (done 2026-09-28 18:40 EDT, f348b1b; found and fixed the min_spacer contract bug)
 - [x] CR11: README "12.7 times faster" is end-to-end one-thread (59.0 s to 4.65 s, before-time never logged); say so, and log a rebuilt parent timing if cheap. (done 2026-09-28 16:37 EDT)
 - [ ] CR10b: on a quiet machine, log held-out #3 scoreboard rows for the f348b1b caller and regenerate docs/img charts; rerun the ART censuses (MGV, INPHARED, GPD) with it and update intents/art_search.md counts.
+- [ ] CR8b: profile --art on one thread (1.2 s on E. coli vs 0.14 s for --crispr) to find where its time goes before optimizing anything.
 - [ ] CR12: divergence opponent rows (e69d2e8) predate plant-arrays and lack input_sha256; rerun MinCED and PILER-CR on the pinned generator and add them to bench/verify.
 - [x] CR13: advisories (OOM leaks fixed in 9db1715): negative named-group lookup cast (finder.zig:51); JIT NOMEMORY ignored (finder.zig:45); normalize FASTA byte classifier per byte, not bucket totals. (done 2026-09-28 18:53 EDT)
 - [ ] CR14 (backlog): u32 positions with a >4 GiB record guard; keep only needed family headers in callArrays (main.zig:207).

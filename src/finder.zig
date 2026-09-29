@@ -762,3 +762,7 @@ test "jitStatus: JIT out of memory is OutOfMemory; success and every other code 
     try jitStatus(c.PCRE2_ERROR_JIT_BADOPTION);
     try jitStatus(c.PCRE2_ERROR_BADOPTION);
 }
+
+test {
+    _ = kmer_scan; // run the k-mer scan's own tests with the finder's
+}

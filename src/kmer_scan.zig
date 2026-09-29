@@ -18,6 +18,12 @@ const invalid: u64 = std.math.maxInt(u64);
 /// window of O(len + gap) u64s, and each start searches the window ahead of it with a
 /// vectorized scalar search.
 /// complexity: O((until - from) * gap) u64 compares; memory O(len + gap).
+/// The gap factor stays on purpose: an O(n) expected sliding hash window (two alternating
+/// open-addressing tables, tried 2026-09-28) gave identical output but was slower where it
+/// matters. One thread on E. coli K-12, user time: --crispr (gap 93) 140 ms here vs 182 ms
+/// hashed; --art (gap 487) 1205 ms vs 1074 ms. A vectorized compare of a few hundred u64s
+/// costs less than two hash probes and an insert per base, and --art spends its time
+/// elsewhere.
 pub fn scan(gpa: Allocator, subject: []const u8, len: usize, gap: usize, from: usize, until: usize, out: *std.ArrayList(usize)) Allocator.Error!void {
     std.debug.assert(len >= 1 and len <= max_len);
     if (subject.len < len) return;
@@ -79,3 +85,53 @@ const Encoder = struct {
         return if (self.run >= self.len) self.code else invalid;
     }
 };
+/// Reference for tests: the definition, checked directly at every start (O(n * gap)).
+fn naiveStarts(gpa: Allocator, subject: []const u8, len: usize, gap: usize, from: usize, until: usize) ![]usize {
+    var out: std.ArrayList(usize) = .empty;
+    errdefer out.deinit(gpa);
+    var p = from;
+    while (p < until and p + len <= subject.len) : (p += 1) {
+        const unit = subject[p..][0..len];
+        if (std.mem.indexOfNone(u8, unit, "ACGT") != null) continue;
+        var q = p + len;
+        while (q <= p + len + gap and q + len <= subject.len) : (q += 1) {
+            if (std.mem.eql(u8, unit, subject[q..][0..len])) {
+                try out.append(gpa, p);
+                break;
+            }
+        }
+    }
+    return out.toOwnedSlice(gpa);
+}
+
+test "scan equals the definition across block boundaries, epoch swaps and sub-ranges" {
+    const gpa = std.testing.allocator;
+    const subject = try gpa.alloc(u8, 150_000);
+    defer gpa.free(subject);
+    var s: u64 = 7;
+    // A skewed alphabet (mostly A and C, some N) makes short k-mers recur at every distance.
+    for (subject) |*b| {
+        s = s * 16807 % 2147483647;
+        b.* = "AAAACCCGTN"[s % 10];
+    }
+    // The full range only at small gaps: the reference costs O(n * gap) in a Debug build.
+    const ranges = [_][2]usize{ .{ 0, subject.len }, .{ 65_530, 65_540 }, .{ 64_000, 67_000 }, .{ 130_000, 132_000 }, .{ 149_000, 150_000 } };
+    for ([_]usize{ 5, 9, 12 }) |len| {
+        for ([_]usize{ 0, 7, 93, 487 }) |gap| {
+            for (ranges, 0..) |r, ri| {
+                if (ri == 0 and gap > 7) continue;
+                const want = try naiveStarts(gpa, subject, len, gap, r[0], r[1]);
+                defer gpa.free(want);
+                var got: std.ArrayList(usize) = .empty;
+                defer got.deinit(gpa);
+                try got.append(gpa, 424242); // existing contents stay in place, before the new starts
+                try scan(gpa, subject, len, gap, r[0], r[1], &got);
+                try std.testing.expectEqual(@as(usize, 424242), got.items[0]);
+                std.testing.expectEqualSlices(usize, want, got.items[1..]) catch |e| {
+                    std.debug.print("len {d} gap {d} range {any}\n", .{ len, gap, r });
+                    return e;
+                };
+            }
+        }
+    }
+}
