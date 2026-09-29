@@ -170,3 +170,10 @@ for upstream of RTs.
   least half, 687 unexplained. Family 1 (GTCTGTGAAGATAGT, 585 arrays in 28 vOTUs, the largest)
   hits Rfam RAGATH-1-hammerhead (a hammerhead-ribozyme motif class) in 133 of 585 members under
   gathering thresholds: likely that known self-cleaving RNA class, to be checked on the rest.
+- ART 5i, family 1 (GTCTGTGAAGATAGT, 585 arrays of 3 copies, all in crAss-like phages): cmsearch
+  with the Rfam RAGATH-1-hammerhead model (RF03152) alone finds exactly one hit in 149 members at
+  E <= 0.01 and the same 149 at E <= 1, always inside a spacer (66 in spacer 1, 83 in spacer 2),
+  never overlapping a repeat copy. The 149 span 25 vOTUs; the other 436 members fall in 4 vOTUs
+  (one dominant clade) and carry none. Hammerhead ribozymes are known in phage genomes (Rfam
+  RF03152; PLOS Comput Biol 2011, 10.1371/journal.pcbi.1002031), so this is a known RNA class in
+  a repeat-flanked setting, not a new element.
