@@ -106,12 +106,12 @@ bench/verify
 ```
 ART loci: 8 of 8 match their expected result (an --art array upstream of the RT, or none).
 
-One thread on held-out #3: dna-repeats 4.73 s, 14 MB; 3.2x faster than MinCED, 5.2x faster than PILER-CR; 35x less memory than MinCED, 1.7x less than PILER-CR.
-All 128 CPUs: dna-repeats 0.64 s, 23x faster than MinCED, 39x faster than PILER-CR.
-VERIFIED: 31 of 31 expected results reproduced exactly.
+One thread on held-out #3: dna-repeats 4.12 s, 14 MB; 3.7x faster than MinCED, 6x faster than PILER-CR; 34x less memory than MinCED, 1.8x less than PILER-CR.
+All 128 CPUs: dna-repeats 1.01 s, 15x faster than MinCED, 24x faster than PILER-CR.
+VERIFIED: 47 of 47 expected results reproduced exactly.
 ```
 
-(A run on 2026-09-28 at commit d339f0e, with other work loading the machine; on a quiet
+(A run on 2026-09-28 at commit 673fe4e, with other work loading the machine; on a quiet
 machine the times are those in the table above.)
 
 It reruns held-out set #3, a negative control (the development genomes with their bases

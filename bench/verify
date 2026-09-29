@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reproduce the README's headline results and check them against bench/expected.tsv:
 # held-out set #3 and the shuffled negative control (every tool, one thread) and the
-# divergence sweep (dna-repeats), and the ART loci (bench/art-check). Recall, predictions, correct predictions and exact
+# divergence sweep (every tool), and the ART loci (bench/art-check). Recall, predictions, correct predictions and exact
 # repeats are deterministic and must match exactly; times and memory depend on the
 # machine, so they are printed with the speed and memory ratios but never fail the run.
 # usage: bench/verify     (exit 0 when every expected row matches)
@@ -15,7 +15,7 @@ export SCOREBOARD_LOG=$work/log.ndjson # keep these runs out of the committed lo
 status=0
 bench/scoreboard --set heldout3 minced pilercr dnarepeats_1t dnarepeats || status=1
 bench/scoreboard --set shuffled minced pilercr dnarepeats_1t | sed 1d || status=1
-bench/divergence dnarepeats dnarepeats_sensitive >/dev/null || status=1
+bench/divergence dnarepeats dnarepeats_sensitive minced pilercr >/dev/null || status=1
 bench/art-check >"$work/art.tsv" || status=1
 
 # Compare the latest measured row for each expected (set, tool).

@@ -46,6 +46,6 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [x] CR11: README "12.7 times faster" is end-to-end one-thread (59.0 s to 4.65 s, before-time never logged); say so, and log a rebuilt parent timing if cheap. (done 2026-09-28 16:37 EDT)
 - [ ] CR10b: on a quiet machine, log held-out #3 scoreboard rows for the f348b1b caller and regenerate docs/img charts; rerun the ART censuses (MGV, INPHARED, GPD) with it and update intents/art_search.md counts.
 - [ ] CR8b: profile --art on one thread (1.2 s on E. coli vs 0.14 s for --crispr) to find where its time goes before optimizing anything.
-- [ ] CR12: divergence opponent rows (e69d2e8) predate plant-arrays and lack input_sha256; rerun MinCED and PILER-CR on the pinned generator and add them to bench/verify.
+- [x] CR12: divergence opponent rows (e69d2e8) predate plant-arrays and lack input_sha256; rerun MinCED and PILER-CR on the pinned generator and add them to bench/verify. (done 2026-09-28 23:50 EDT: MinCED and PILER-CR rows reproduced from the pinned generator; verify now 47 checks)
 - [x] CR13: advisories (OOM leaks fixed in 9db1715): negative named-group lookup cast (finder.zig:51); JIT NOMEMORY ignored (finder.zig:45); normalize FASTA byte classifier per byte, not bucket totals. (done 2026-09-28 18:53 EDT)
 - [ ] CR14 (backlog): u32 positions with a >4 GiB record guard; keep only needed family headers in callArrays (main.zig:207).
