@@ -63,3 +63,7 @@ Append-only record of completed PLAN.md items.
 - [x] [Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)] CR11: README "12.7 times faster" is end-to-end one-thread (59.0 s to 4.65 s, before-time never logged); say so, and log a rebuilt parent timing if cheap. (done 2026-09-28 16:37 EDT)
 - [x] [Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)] CR5: one definition of "6 kb upstream" for art-check and art-link (gap from array edge to RT start codon 1..6000, strand-aware); recheck the 8 loci and the census counts. (done 2026-09-28 16:45 EDT; 8 loci unchanged)
 - [x] [Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)] CR6: sequence before the first FASTA header reports MissingHeader, not "invalid byte 0x3e" (CLI test first); README: plain input rejects N. (done 2026-09-28 16:52 EDT)
+
+## Retired 2026-09-29
+
+- [x] [Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)] CR7: finder worker errors keep their cause (OutOfMemory, Compile, MatchFailed) instead of always MatchFailed; negative pcre2_match codes named. (done 2026-09-28 17:22 EDT)

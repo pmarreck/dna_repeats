@@ -161,3 +161,12 @@ for upstream of RTs.
   representative matches", not "the family does". Family 3 is therefore a conserved 3-copy
   repeat carrying an inverted repeat (AAGTATC ... GATACTT), 500-2,000 bp upstream of an ECF sigma
   gene in 265 crAss-like phage genomes: an open lead, together with family 4.
+- Reruns with the min_spacer fix (f348b1b; census_*_v2): MGV 23,668 arrays (was 26,418), 6,895
+  non-coding, 1,930 RT-upstream; INPHARED 8,558 (was 9,274), 2,241 non-coding, 14 RT-upstream
+  with the same 8 retron-class loci; GPD 13,676 (was 15,291), 4,051 non-coding, 542
+  RT-upstream, still no non-coding retron-class array. Earlier counts above are pre-fix.
+- Per-member screen of the 780 MGV v2 non-coding families (art-screen with art-reps --all; 6,895
+  members; 29 min): 37 families are a known RNA in at least half their members, 56 CRISPR in at
+  least half, 687 unexplained. Family 1 (GTCTGTGAAGATAGT, 585 arrays in 28 vOTUs, the largest)
+  hits Rfam RAGATH-1-hammerhead (a hammerhead-ribozyme motif class) in 133 of 585 members under
+  gathering thresholds: likely that known self-cleaving RNA class, to be checked on the rest.
