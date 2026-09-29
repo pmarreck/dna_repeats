@@ -6,6 +6,8 @@
 
 local function esc(s) return (tostring(s):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")) end
 local function fmt(x, d) return string.format("%." .. (d or 1) .. "f", x) end
+-- A ratio as "1.04×", "4.1×" or "28×": two decimals near 1, one below 10, none above.
+local function times(x) return fmt(x, x < 1.5 and 2 or (x < 10 and 1 or 0)) .. "×" end
 
 -- Palette: categorical slots 1-3 (validated all-pairs, light and dark) and neutrals.
 local STYLE = [[
@@ -20,6 +22,8 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 .bg { fill: var(--bg); }
 .grid { stroke: var(--grid); stroke-width: 1; }
 .base { stroke: var(--ink3); stroke-width: 1; }
+.mult { font-size: 15px; font-weight: 600; fill: var(--s1); }
+.mult-all { font-size: 15px; font-weight: 600; fill: var(--s1); }
 </style>]]
 
 local TOOLS = {
@@ -36,8 +40,16 @@ local function bar(x0, y, w, h, color)
 		x0, y, w - r, r, r, r, r, h - 2 * r, r, r, -r, r, -(w - r), color)
 end
 
--- One panel of the held-out small multiples: three bars on one axis from zero.
-local function panel(ox, oy, p, rows)
+-- dna-repeats' multiplier over the best other tool on a panel's axis.
+local function multiplier(p, rows)
+	local d, a, b = p.val(rows.dnarepeats_1t), p.val(rows.minced), p.val(rows.pilercr)
+	if p.lower then return math.min(a, b) / d end
+	return d / math.max(a, b)
+end
+
+-- One panel of the held-out small multiples: three bars on one axis from zero, and a column
+-- with dna-repeats' multiplier over the best other tool (plus the all-cores one for time).
+local function panel(ox, oy, p, rows, all)
 	local out = {}
 	local W, labelW, valW = 280, 86, 78
 	local x0, x1 = ox + labelW, ox + W - valW
@@ -59,6 +71,15 @@ local function panel(ox, oy, p, rows)
 		out[#out + 1] = bar(x0, y + 7, sx(v) - x0, 18, t.color)
 		out[#out + 1] = string.format('<text class="v%s" x="%.1f" y="%.1f">%s</text>', i == 1 and " b" or "", sx(v) + 6, y + 20, esc(p.label(r)))
 	end
+	local mx = ox + W + 8
+	out[#out + 1] = string.format('<text class="n" x="%d" y="%d">vs best other</text>', mx, oy + 16)
+	out[#out + 1] = string.format('<text class="mult" x="%d" y="%d">%s</text>', mx, top + 20, times(multiplier(p, rows)))
+	if p.all_cores then -- stacked: one core, then all cores (the column is ~50 px wide)
+		local best = math.min(p.val(rows.minced), p.val(rows.pilercr))
+		out[#out + 1] = string.format('<text class="n" x="%d" y="%d">one core</text>', mx, top + 33)
+		out[#out + 1] = string.format('<text class="mult-all" x="%d" y="%d">%s</text>', mx, top + 58, times(best / all.wall_s))
+		out[#out + 1] = string.format('<text class="n" x="%d" y="%d">all cores</text>', mx, top + 71)
+	end
 	return table.concat(out, "\n")
 end
 
@@ -68,28 +89,28 @@ local function heldout_svg(rows, set_name, all)
 	local panels = {
 		{ title = "Recall", note = "curated arrays found (higher is better)", max = 100,
 			val = function(r) return pct(r.recalled, r.el4) end, label = function(r) return r.recalled .. "/" .. r.el4 end, tick = function(v) return v .. "%" end },
-		{ title = "Precision", note = "predictions inside a curated array", max = 100,
+		{ title = "Precision", note = "predictions inside any CRISPRCasdb array", max = 100,
 			val = function(r) return pct(r.correct, r.predictions) end, label = function(r) return fmt(pct(r.correct, r.predictions)) .. "%" end, tick = function(v) return v .. "%" end },
 		{ title = "Exact repeat sequence", note = "matches CRISPRCasdb's repeat", max = 100,
 			val = function(r) return pct(r.dr_exact, r.dr_scored) end, label = function(r) return fmt(pct(r.dr_exact, r.dr_scored)) .. "%" end, tick = function(v) return v .. "%" end },
-		{ title = "Time on one core", note = string.format("seconds, 30 genomes; dna-repeats on %s: %s s", all.cpus > 0 and (all.cpus .. " threads") or "all threads", fmt(all.wall_s, 2)), max = 25,
+		{ title = "Time on one core", note = string.format("seconds, 30 genomes; dna-repeats on %s: %s s", all.cpus > 0 and (all.cpus .. " threads") or "all threads", fmt(all.wall_s, 2)), max = 25, lower = true, all_cores = true,
 			val = function(r) return r.wall_s end, label = function(r) return fmt(r.wall_s, 2) .. " s" end, tick = function(v) return fmt(v, 0) end },
-		{ title = "Peak memory", note = "MB, largest genome (lower is better)", max = 500,
+		{ title = "Peak memory", note = "MB, largest genome (lower is better)", max = 500, lower = true,
 			val = function(r) return r.peak_kb / 1024 end, label = function(r) return fmt(r.peak_kb / 1024) .. " MB" end, tick = function(v) return fmt(v, 0) end },
 	}
-	local W, H = 900, 350
+	local W, H = 1040, 350
 	local out = { string.format('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d" role="img" aria-label="%s">', W, H, W, H,
 		esc("Held-out set #3: recall, precision, exact repeat, time on one core and peak memory for dna-repeats, MinCED and PILER-CR")), STYLE,
 		string.format('<rect class="bg" width="%d" height="%d" rx="6"/>', W, H),
 		string.format('<text class="t" x="20" y="30">%s</text>', esc(set_name)) }
 	for i, p in ipairs(panels) do
 		local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
-		out[#out + 1] = panel(20 + col * 295, 62 + row * 145, p, rows)
+		out[#out + 1] = panel(20 + col * 340, 62 + row * 145, p, rows, all)
 	end
 	-- Legend in the free sixth cell.
 	for i, t in ipairs(TOOLS) do
 		local y = 222 + (i - 1) * 22
-		out[#out + 1] = string.format('<rect x="610" y="%d" width="12" height="12" rx="3" fill="%s"/><text x="630" y="%d" style="font-size:13px">%s</text>',
+		out[#out + 1] = string.format('<rect x="700" y="%d" width="12" height="12" rx="3" fill="%s"/><text x="720" y="%d" style="font-size:13px">%s</text>',
 			y, t.color, y + 11, esc(t.name .. (t.id == "dnarepeats_1t" and " (one thread)" or "")))
 	end
 	out[#out + 1] = "</svg>"

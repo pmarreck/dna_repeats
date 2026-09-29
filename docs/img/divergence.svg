@@ -10,6 +10,8 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 .bg { fill: var(--bg); }
 .grid { stroke: var(--grid); stroke-width: 1; }
 .base { stroke: var(--ink3); stroke-width: 1; }
+.mult { font-size: 15px; font-weight: 600; fill: var(--s1); }
+.mult-all { font-size: 15px; font-weight: 600; fill: var(--s1); }
 </style>
 <rect class="bg" width="900" height="360" rx="6"/>
 <text class="t" x="20" y="28">Planted arrays found (of 20) as every repeat copy is mutated</text>

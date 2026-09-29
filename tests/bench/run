@@ -321,4 +321,24 @@ check art-context-run-summary "$got" "families: 1; members: 1; proteins scanned:
 check art-context-run-context "$(cat "$cr/out/context.tsv")" "$(printf '2\t1\tDom\t1\t1.00')"
 check art-context-run-quiet "$(cat "$cr/err")" ""
 
+# bench/charts: each held-out panel shows dna-repeats' multiplier over the best other tool
+# on that axis (higher is better: ours / best other; time and memory: best other / ours), and
+# the time panel also the all-cores multiplier. Fixture: the 2026-09-29 quiet-machine rows.
+ch3="$pdir/charts"
+mkdir -p "$ch3/out"
+{
+	row() { printf '{"set":"%s","tool":"%s","recalled":%s,"el4":%s,"predictions":%s,"correct":%s,"wall_s":%s,"peak_kb":%s,"dr_scored":%s,"dr_exact":%s,"cpus":%s}\n' "$@"; }
+	row heldout3 minced 67 73 71 67 15.56 471284 67 51 128
+	row heldout3 pilercr 63 73 75 71 24.57 25492 71 52 128
+	row heldout3 dnarepeats_1t 68 73 72 71 3.78 14340 71 60 128
+	row heldout3 dnarepeats 68 73 72 71 0.56 11264 71 60 128
+	for r in 0 2 4 6 8 10 12 15; do
+		for t in dnarepeats dnarepeats_sensitive minced pilercr; do row "div-$r" "$t" 20 20 20 20 1 1 20 20 128; done
+	done
+} >"$ch3/log.ndjson"
+luajit bench/charts "$ch3/log.ndjson" "$ch3/out" 2>/dev/null
+svg=$(cat "$ch3/out/heldout3.svg" 2>/dev/null)
+got=$(grep -o 'class="mult[^"]*"[^>]*>[^<]*' <<<"$svg" | sed 's/.*>//' | tr '\n' ' ')
+check charts-multipliers "$got" "1.01× 1.04× 1.11× 4.1× 28× 1.8× "
+
 exit "$fails"

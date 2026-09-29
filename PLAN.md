@@ -16,7 +16,7 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 	- [x] ART 5i: family 1 (585 arrays) hits RAGATH-1-hammerhead in 133 members: check the rest below gathering threshold (cmscan -E 0.01) and whether each copy is one ribozyme. (done 2026-09-29 14:15 EDT: one hammerhead per array in 149 of 585, inside a spacer; known RNA class)
 	- [ ] Long-period repeat census (Peter, 2026-09-28): units of 50..500 nt, copies up to several kb apart, across the same phage collections; cluster families and screen out known element classes (coding repeats, rRNA, insertion sequences) before calling anything novel. After the ART census.
 	- [ ] ART 6: findings report and README section.
-- [ ] Auto thread count: default (all 128) is 15% slower than -j 48 on held-out #3 (589 vs 511 ms; knee near 32). Measure per phase (scan chunks vs per-length pool, which cannot use more threads than lengths) and cap accordingly.
+- [x] Auto thread count: default (all 128) is 15% slower than -j 48 on held-out #3 (589 vs 511 ms; knee near 32). Measure per phase (scan chunks vs per-length pool, which cannot use more threads than lengths) and cap accordingly. (done 2026-09-29 14:45 EDT via the chunk floor, a2f4e08)
 - [ ] Release binaries for the 5 targets (gh release).
 - [ ] Precision idea from PILER-CR: spacer length uniformity (min/max >= 0.75) and repeat conservation; validate on held-out #2.
 - [ ] Memory next: keep only seed runs per length, u32 positions; fix the two OOM-path leaks with a failing-allocator sweep.
@@ -37,12 +37,9 @@ Decision (Peter, 2026-09-26): correctness is determined in Zig Debug mode (./tes
 - [ ] Repin the fork when capture-history changes; the deps hash in flake.nix must be regenerated with it.
 
 ## Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)
-- [x] CR1b: update the published findings report artifact like the README (both precision readings; it still says fewer false ones). (done 2026-09-28 23:45 EDT, artifact version 2)
-- [x] CR8: kmer_scan hot loop is O(n * gap) on misses; sliding window multiset for expected O(n), scaling-ratio gate, then remeasure the prefilter share. (done 2026-09-28 23:40 EDT: O(n) hash window built and measured, slower at the CRISPR gap; kept the vectorized scan, documented why, kept its new reference test)
 - [x] CR10b: on a quiet machine, log held-out #3 scoreboard rows for the f348b1b caller and regenerate docs/img charts; rerun the ART censuses (MGV, INPHARED, GPD) with it and update intents/art_search.md counts. (done 2026-09-29 11:52 EDT: quiet-machine scoreboard, thread sweep, E. coli timing, verify sample, charts)
 - [x] CR8b: profile --art on one thread (1.2 s on E. coli vs 0.14 s for --crispr) to find where its time goes before optimizing anything. (done 2026-09-29 00:00 EDT: E. coli one thread user 1.19 s; --max-len 12 0.29 s, 24 0.58 s: the per-length family step dominates, not the prefilter)
-- [ ] Peter 2026-09-29: the README headline and chart show the 128-thread time, but -j 48 was faster: make the default thread count pick the fast setting (see Auto thread count), then report the default.
-- [ ] Peter 2026-09-29: the held-out chart gets a separate column with dna-repeats' multiplier over the best previous tool per axis (e.g. "44x").
+- [x] Peter 2026-09-29: the README headline and chart show the 128-thread time, but -j 48 was faster: make the default thread count pick the fast setting (see Auto thread count), then report the default. (done 2026-09-29 14:45 EDT: 128K scan-chunk floor makes the default the fastest setting)
+- [x] Peter 2026-09-29: the held-out chart gets a separate column with dna-repeats' multiplier over the best previous tool per axis (e.g. "44x"). (done 2026-09-29 14:45 EDT; tested in tests/bench/run)
 - [x] CR8c: per-length exact candidates (lengthCandidates: one window scan per start for all lengths, tested against the definition); identical output, verify 47/47; E. coli one thread --crispr 139 -> 118 ms, --art 1196 -> 831 ms user; held-out #3 one thread 3.72 -> 3.32 s, multi-thread unchanged. (done 2026-09-29 14:25 EDT)
-- [x] CR12: divergence opponent rows (e69d2e8) predate plant-arrays and lack input_sha256; rerun MinCED and PILER-CR on the pinned generator and add them to bench/verify. (done 2026-09-28 23:50 EDT: MinCED and PILER-CR rows reproduced from the pinned generator; verify now 47 checks)
 - [ ] CR14 (backlog): u32 positions with a >4 GiB record guard; keep only needed family headers in callArrays (main.zig:207).
