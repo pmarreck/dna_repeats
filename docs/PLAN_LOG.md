@@ -75,3 +75,7 @@ Append-only record of completed PLAN.md items.
 - [x] [Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)] CR12: divergence opponent rows (e69d2e8) predate plant-arrays and lack input_sha256; rerun MinCED and PILER-CR on the pinned generator and add them to bench/verify. (done 2026-09-28 23:50 EDT: MinCED and PILER-CR rows reproduced from the pinned generator; verify now 47 checks)
 - [x] [Now › ART (Peter, 2026-09-28): run on the relevant genomes and try…] ART 5f: ECF-sigma lead (families 3, 4): orientation and distance of the sigma gene to the array, host range, whether the repeats carry ECF promoter motifs (-35 AAC, -10 CGT). (done 2026-09-29 00:00 EDT: array sits upstream of the sigma gene in 265/283 and 247/258; crAss-like phages only)
 - [x] [Code review 2026-09-28 (Grok, at cc8e504; findings double-checked)] CR8b: profile --art on one thread (1.2 s on E. coli vs 0.14 s for --crispr) to find where its time goes before optimizing anything. (done 2026-09-29 00:00 EDT: E. coli one thread user 1.19 s; --max-len 12 0.29 s, 24 0.58 s: the per-length family step dominates, not the prefilter)
+
+## Retired 2026-10-14
+
+- [x] [Now › ART (BDFN, 2026-09-28): run on the relevant genomes and try …] ART 3: INPHARED 14Apr2025 (34,062 phages, 2.1 Gb) scanned by bench/art-census in about 2 min on 64 workers; the 8 retron-class loci are the preprint's 7 plus LPJP1. (done 2026-09-28 12:00 EDT)
